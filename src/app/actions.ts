@@ -1,0 +1,26 @@
+'use server'
+
+import { scrapeGoogleMaps, ScrapeResult } from '@/lib/scraper';
+import fs from 'fs';
+import path from 'path';
+
+export async function runScraper(query: string, location: string, limit: number = 10, radius?: number) {
+  try {
+    const results = await scrapeGoogleMaps({ query, location, limit, radius });
+
+    // Handle persistence in the action layer (separation of concerns)
+    const outputDir = path.join(process.cwd(), 'tools/scraper/results');
+    const fileName = `leads_${query.replace(/\s+/g, '_')}_${Date.now()}.json`;
+    const filePath = path.join(outputDir, fileName);
+
+    fs.mkdirSync(outputDir, { recursive: true });
+    fs.writeFileSync(filePath, JSON.stringify(results, null, 2));
+
+    console.log(`Successfully saved ${results.length} results to ${filePath}`);
+
+    return { success: true, data: results };
+  } catch (error: any) {
+    console.error('Action error:', error);
+    return { success: false, error: error.message };
+  }
+}

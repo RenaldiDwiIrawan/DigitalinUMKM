@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm list:*)",
+      "Bash(npm install:*)",
+      "Bash(ls:*)",
+      "Bash(npx playwright:*)",
+      "Bash(npm run:*)",
+      "WebSearch",
+      "WebFetch(domain:www.scrapingbee.com)",
+      "Bash(npx tsx:*)"
+    ]
+  }
+}
