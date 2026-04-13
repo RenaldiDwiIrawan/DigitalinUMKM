@@ -70,174 +70,151 @@ Jarak: ${viewingLead.distance || 'N/A'}
         className="absolute inset-0 bg-gray-900/60 backdrop-blur-md animate-in fade-in duration-500"
         onClick={() => setViewingLead(null)}
       />
-      <Card className="glass w-full max-w-xl rounded-[3.5rem] shadow-[0_40px_100px_rgba(0,0,0,0.3)] overflow-hidden relative z-10 animate-in zoom-in-95 fade-in duration-500 border-white/20">
-        <div className="absolute top-8 right-8 flex gap-3 z-20">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={copyAllInfo}
-            className="h-10 px-4 bg-white/50 hover:bg-white text-blue-600 rounded-xl transition-all border border-white/40 text-[9px] font-black uppercase tracking-widest flex items-center gap-2"
-          >
-            <Copy className="w-3.5 h-3.5" />
-            Copy All
-          </Button>
+      <Card className="bg-white w-full max-w-md rounded-3xl shadow-2xl overflow-hidden relative z-10 animate-in zoom-in-95 fade-in duration-300 border-none">
+        <div className="absolute top-4 right-4 z-20">
           <Button
             variant="ghost"
             size="icon"
             onClick={() => setViewingLead(null)}
-            className="w-10 h-10 flex items-center justify-center bg-white/50 hover:bg-white text-gray-500 rounded-xl transition-all border border-white/40"
+            className="w-8 h-8 flex items-center justify-center bg-gray-100/50 hover:bg-gray-100 text-gray-500 rounded-full transition-all"
           >
             <X className="w-4 h-4" />
           </Button>
         </div>
 
         <CardContent className="p-0">
-          <div className="bg-gradient-to-br from-blue-600 to-indigo-700 p-10 text-white text-center relative overflow-hidden">
-            <div className="relative z-10 flex flex-col items-center">
-              <div className="w-20 h-20 bg-white/20 backdrop-blur-md rounded-[2rem] flex items-center justify-center text-3xl shadow-2xl mb-6 ring-8 ring-white/10">
+          <div className="p-8 pb-4 text-center border-b border-gray-50">
+            <div className="relative inline-block mb-4">
+              <div className="w-16 h-16 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center text-2xl font-bold shadow-sm border border-blue-100/50">
                 {viewingLead.name.charAt(0)}
               </div>
-              <h2 className="text-3xl font-black leading-tight tracking-tighter mb-4">{viewingLead.name}</h2>
-              {viewingLead.distance && (
-                <div className="text-[10px] font-black uppercase tracking-[0.2em] opacity-80 flex items-center gap-2 bg-black/10 px-4 py-2 rounded-full backdrop-blur-sm">
-                  <MapPin className="w-3 h-3" /> {viewingLead.distance} dari lokasi Anda
-                </div>
-              )}
+              <div className="absolute -bottom-1 -right-1 w-6 h-6 bg-green-500 border-2 border-white rounded-full flex items-center justify-center">
+                <div className="w-2 h-2 bg-white rounded-full animate-pulse" />
+              </div>
             </div>
+            <h2 className="text-2xl font-bold text-gray-900 leading-tight mb-2 px-4">{viewingLead.name}</h2>
+            {viewingLead.distance && (
+              <div className="text-[10px] font-semibold text-gray-500 uppercase tracking-widest flex items-center justify-center gap-1.5">
+                <MapPin className="w-3 h-3 text-blue-500" /> {viewingLead.distance} dari lokasi Anda
+              </div>
+            )}
           </div>
 
-          <div className="p-10 space-y-8 bg-white/40 backdrop-blur-md">
-            <div className="grid grid-cols-1 gap-6">
-              {/* Telepon Section */}
-              <div className="group">
-                <label className="block text-[11px] font-black text-blue-700/80 uppercase tracking-[0.3em] mb-4 px-1">Kontak Telepon</label>
-                <div className="flex items-center justify-between p-6 bg-white/60 rounded-[2rem] border border-white/40 group-hover:bg-white group-hover:border-blue-200 transition-all duration-300 shadow-sm group-hover:shadow-xl group-hover:shadow-blue-600/5">
-                  <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center shadow-inner">
-                      <Phone className="w-5 h-5" />
+          <div className="p-8 pt-6 space-y-6">
+            <div className="space-y-4">
+              {/* Contact Grid */}
+              <div className="grid grid-cols-1 gap-3">
+                {/* Phone */}
+                <div className="flex items-center justify-between p-4 bg-gray-50/50 rounded-2xl border border-gray-100 hover:border-blue-100 hover:bg-white transition-all group">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-white text-blue-600 rounded-xl flex items-center justify-center shadow-sm border border-gray-100">
+                      <Phone className="w-4 h-4" />
                     </div>
                     <div>
-                      <div className="font-black text-gray-900 text-xl tracking-tight">{viewingLead.phone || 'N/A'}</div>
-                      <div className="text-[10px] text-gray-400 font-black uppercase tracking-widest">Nomor Bisnis</div>
+                      <div className="text-sm font-semibold text-gray-900">{viewingLead.phone || 'N/A'}</div>
+                      <div className="text-[9px] text-gray-400 font-medium uppercase tracking-wider">Telepon</div>
                     </div>
                   </div>
                   {viewingLead.phone && (
-                    <div className="flex gap-2">
+                    <div className="flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
                       <Button
                         variant="ghost"
-                        size="sm"
+                        size="icon"
                         onClick={() => copyToClipboard(viewingLead.phone!, 'Nomor')}
-                        className="h-10 px-4 bg-white border border-gray-100 rounded-lg hover:text-blue-600 hover:border-blue-200 shadow-sm text-[10px] font-black uppercase tracking-[0.2em] transition-all"
+                        className="w-8 h-8 text-gray-400 hover:text-blue-600"
                       >
-                        Copy
+                        <Copy className="w-3.5 h-3.5" />
                       </Button>
                       <Button
                         asChild
-                        variant="premium"
-                        size="sm"
-                        className="h-10 px-4 rounded-lg shadow-xl shadow-blue-600/10 text-[10px] font-black uppercase tracking-[0.2em] transition-all"
+                        variant="ghost"
+                        size="icon"
+                        className="w-8 h-8 text-green-500 hover:bg-green-50"
                       >
-                        <a
-                          href={formatWA(viewingLead.phone)}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                        >
-                          WhatsApp
+                        <a href={formatWA(viewingLead.phone)} target="_blank" rel="noopener noreferrer">
+                          <Send className="w-3.5 h-3.5" />
                         </a>
                       </Button>
                     </div>
                   )}
                 </div>
-              </div>
 
-              {/* Email Section */}
-              <div className="group">
-                <label className="block text-[11px] font-black text-blue-700/80 uppercase tracking-[0.3em] mb-4 px-1">Alamat Email</label>
-                <div className="flex items-center justify-between p-6 bg-white/60 rounded-[2rem] border border-white/40 group-hover:bg-white group-hover:border-blue-200 transition-all duration-300 shadow-sm group-hover:shadow-xl group-hover:shadow-blue-600/5">
-                  <div className="flex items-center gap-4 min-w-0">
-                    <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center shadow-inner shrink-0">
-                      <Mail className="w-5 h-5" />
+                {/* Email */}
+                <div className="flex items-center justify-between p-4 bg-gray-50/50 rounded-2xl border border-gray-100 hover:border-indigo-100 hover:bg-white transition-all group">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-10 h-10 bg-white text-indigo-600 rounded-xl flex items-center justify-center shadow-sm border border-gray-100">
+                      <Mail className="w-4 h-4" />
                     </div>
                     <div className="min-w-0">
-                      <div className={`font-black text-xl break-all tracking-tight ${viewingLead.email ? 'text-gray-900' : 'text-gray-400 italic font-normal'}`}>
+                      <div className={`text-sm font-semibold truncate ${viewingLead.email ? 'text-gray-900' : 'text-gray-400'}`}>
                         {viewingLead.email || 'Email tidak ditemukan'}
                       </div>
-                      <div className="text-[10px] text-gray-400 font-black uppercase tracking-widest">Surel Bisnis</div>
+                      <div className="text-[9px] text-gray-400 font-medium uppercase tracking-wider">Email</div>
                     </div>
                   </div>
                   {viewingLead.email && (
-                    <div className="flex gap-2 shrink-0">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => copyToClipboard(viewingLead.email!, 'Email')}
-                        className="h-10 px-4 bg-white border border-gray-100 rounded-lg hover:text-blue-600 hover:border-blue-200 shadow-sm text-[10px] font-black uppercase tracking-[0.2em] transition-all"
-                      >
-                        Copy
-                      </Button>
+                    <div className="flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
                       <Button
                         asChild
-                        variant="default"
-                        size="sm"
-                        className="h-10 px-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg shadow-xl shadow-indigo-600/10 text-[10px] font-black uppercase tracking-[0.2em] transition-all"
+                        variant="ghost"
+                        size="icon"
+                        className="w-8 h-8 text-indigo-500 hover:bg-indigo-50"
                       >
                         <a href={`mailto:${viewingLead.email}`}>
-                          Email
+                          <ExternalLink className="w-3.5 h-3.5" />
                         </a>
                       </Button>
                     </div>
                   )}
                 </div>
-              </div>
 
-              {/* Website Section */}
-              <div className="group">
-                <label className="block text-[11px] font-black text-blue-700/80 uppercase tracking-[0.3em] mb-4 px-1">Situs Web</label>
-                <div className="flex items-center justify-between p-6 bg-white/60 rounded-[2rem] border border-white/40 group-hover:bg-white group-hover:border-indigo-200 transition-all duration-300 shadow-sm group-hover:shadow-xl group-hover:shadow-indigo-600/5">
-                  <div className="flex items-center gap-4 min-w-0">
-                    <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center shadow-inner shrink-0">
-                      <Globe className="w-5 h-5" />
+                {/* Website */}
+                <div className="flex items-center justify-between p-4 bg-gray-50/50 rounded-2xl border border-gray-100 hover:border-blue-100 hover:bg-white transition-all group">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-10 h-10 bg-white text-blue-600 rounded-xl flex items-center justify-center shadow-sm border border-gray-100">
+                      <Globe className="w-4 h-4" />
                     </div>
                     <div className="min-w-0">
-                      <div className="font-black text-blue-600 text-xl break-all tracking-tight">
+                      <div className="text-sm font-semibold text-blue-600 truncate hover:underline">
                         {viewingLead.website ? (
-                          <a href={viewingLead.website} target="_blank" rel="noopener noreferrer" className="hover:underline">
+                          <a href={viewingLead.website} target="_blank" rel="noopener noreferrer">
                             {viewingLead.website.replace(/^https?:\/\//, '')}
                           </a>
                         ) : (
-                          <span className="text-gray-900">N/A</span>
+                          <span className="text-gray-400">N/A</span>
                         )}
                       </div>
-                      <div className="text-[10px] text-gray-400 font-black uppercase tracking-widest">URL Resmi</div>
+                      <div className="text-[9px] text-gray-400 font-medium uppercase tracking-wider">Website</div>
                     </div>
                   </div>
-                  {viewingLead.website && (
-                    <Button
-                      asChild
-                      variant="ghost"
-                      size="sm"
-                      className="h-10 px-4 bg-white border border-gray-100 rounded-lg hover:text-indigo-600 hover:border-indigo-200 shadow-sm shrink-0 text-[10px] font-black uppercase tracking-[0.2em] transition-all"
-                    >
-                      <a href={viewingLead.website} target="_blank" rel="noopener noreferrer">
-                        Visit Site
-                      </a>
-                    </Button>
-                  )}
                 </div>
               </div>
             </div>
 
-            <div className="pt-4">
+            <div className="pt-2 flex flex-col gap-3">
               <Button
                 onClick={() => {
                   setSelectedLead(viewingLead);
                   setViewingLead(null);
                   document.getElementById('templates')?.scrollIntoView({ behavior: 'smooth' });
                 }}
-                variant={selectedLead?.name === viewingLead.name ? "outline" : "premium"}
-                className="w-full h-16 rounded-[1.5rem] text-[10px] font-black uppercase tracking-[0.4em] shadow-2xl shadow-blue-600/20"
+                variant={selectedLead?.name === viewingLead.name ? "outline" : "default"}
+                className={`w-full h-12 rounded-2xl text-xs font-bold uppercase tracking-wider transition-all ${
+                  selectedLead?.name === viewingLead.name
+                    ? 'border-gray-200 text-gray-400'
+                    : 'bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-600/20'
+                }`}
               >
-                {selectedLead?.name === viewingLead.name ? 'SUDAH TERPILIH' : 'PILIH BISNIS INI'}
+                {selectedLead?.name === viewingLead.name ? 'Sudah Terpilih' : 'Pilih Bisnis Ini'}
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={copyAllInfo}
+                className="text-[10px] text-gray-400 font-medium hover:text-gray-600 flex items-center justify-center gap-1.5"
+              >
+                <Copy className="w-3 h-3" />
+                Salin Semua Informasi
               </Button>
             </div>
           </div>
