@@ -12,28 +12,36 @@ async function getBrowser(): Promise<Browser> {
   if (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME) {
     console.log('Detected serverless environment (Vercel/Lambda).');
     try {
-      // Use dynamic imports for serverless-only dependencies
       const chromium = (await import('@sparticuz/chromium-min')).default;
 
-      // Optional: Set a remote URL for the chromium pack if it's too large for the bundle
-      // This is often needed for chromium-min
-      const executablePath = await chromium.executablePath(
-        'https://github.com/sparticuz/chromium/releases/download/v147.0.0/chromium-v147.0.0-pack.tar'
-      );
+      // Try to find executable path.
+      // We'll try to use a known stable version if the default fails.
+      let executablePath: string;
+      try {
+        executablePath = await chromium.executablePath();
+      } catch {
+        console.log('Default executable path failed, trying with remote pack...');
+        executablePath = await chromium.executablePath(
+          'https://github.com/sparticuz/chromium/releases/download/v123.0.1/chromium-v123.0.1-pack.tar'
+        );
+      }
 
-      console.log('Launching playwright-core with sparticuz/chromium...');
+      console.log('Launching playwright-core with executablePath:', executablePath);
       return await playwright.launch({
         args: chromium.args,
         executablePath,
         headless: true,
       });
-    } catch (error) {
+    } catch (error: any) {
       console.error('CRITICAL: Failed to launch serverless chromium:', error);
-      // Fallback to connection if endpoint exists, otherwise this will likely fail
+
+      // Provide fallback to connection if endpoint exists
       if (process.env.BROWSER_WS_ENDPOINT) {
         return await playwright.connectOverCDP(process.env.BROWSER_WS_ENDPOINT);
       }
-      throw new Error('Could not launch browser in serverless environment. Please check Vercel logs.');
+
+      // Throw a more descriptive error so the user can see what's wrong
+      throw new Error(`Browser launch failed: ${error.message || 'Unknown error'}. Check Vercel logs for stack trace.`);
     }
   }
 
