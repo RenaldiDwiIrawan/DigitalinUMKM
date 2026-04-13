@@ -121,8 +121,11 @@ async function findEmailFromWebsite(context: BrowserContext, url: string): Promi
 
   const searchEmails = async (targetUrl: string) => {
     try {
-      // Increased timeout for external websites
-      await page.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: 15000 });
+      // Increased timeout and changed waitUntil for better compatibility
+      await page.goto(targetUrl, { waitUntil: 'load', timeout: 20000 });
+      // Small delay for dynamic content
+      await page.waitForTimeout(1000);
+
       const found = await page.evaluate(() => {
         const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
         // Search in text and in href="mailto:..."
@@ -138,6 +141,7 @@ async function findEmailFromWebsite(context: BrowserContext, url: string): Promi
           return (
             !lower.includes('sentry') &&
             !lower.includes('example') &&
+            !lower.includes('wix.com') &&
             !lower.includes('.png') &&
             !lower.includes('.jpg') &&
             !lower.includes('.jpeg') &&
@@ -146,7 +150,8 @@ async function findEmailFromWebsite(context: BrowserContext, url: string): Promi
         });
       });
       return found;
-    } catch {
+    } catch (error) {
+      console.log(`Failed to scrape ${targetUrl}:`, error);
       return null;
     }
   };
@@ -262,35 +267,52 @@ async function extractLeadDetails(page: Page, item: any, baseCoords: Coordinates
     }
 
     const panelDetails = await page.evaluate(() => {
-      // Find phone: looking for specific patterns and tel: links
-      const phoneLinks = Array.from(document.querySelectorAll('a[href^="tel:"]'));
-      let phone = phoneLinks.length > 0 ? (phoneLinks[0] as HTMLAnchorElement).href.replace('tel:', '').trim() : null;
+      // Helper to find by data-item-id patterns
+      const findByItemId = (pattern: string) => {
+        const el = Array.from(document.querySelectorAll('[data-item-id]')).find(el =>
+          (el.getAttribute('data-item-id') || '').includes(pattern)
+        );
+        return el ? (el as HTMLElement).innerText.trim() : null;
+      };
 
+      // 1. Find phone
+      // Try data-item-id first
+      let phone = findByItemId('phone:tel:');
+
+      // Try tel: links
+      if (!phone) {
+        const phoneLinks = Array.from(document.querySelectorAll('a[href^="tel:"]'));
+        phone = phoneLinks.length > 0 ? (phoneLinks[0] as HTMLAnchorElement).href.replace('tel:', '').trim() : null;
+      }
+
+      // Try searching for Indonesian phone pattern in all buttons/spans
       if (!phone) {
         const phoneBtn = Array.from(document.querySelectorAll('button, a, span')).find(el => {
-          const label = (el as HTMLElement).getAttribute('aria-label') || '';
           const text = (el as HTMLElement).innerText || '';
-          const itemId = (el as HTMLElement).getAttribute('data-item-id') || '';
-
-          return (
-            /phone|telepon/i.test(label) ||
-            /phone|telepon/i.test(itemId) ||
-            /^(\+62|62|0)8[1-9][0-9]{7,11}$/.test(text.replace(/[\s\-]/g, ''))
-          );
+          return /^(\+62|62|0)8[1-9][0-9]{7,11}$/.test(text.replace(/[\s\-]/g, ''));
         });
         phone = phoneBtn ? (phoneBtn as HTMLElement).innerText.trim() : null;
       }
 
-      // Find website: looking for the website button or any external link in the details section
-      const webBtn = document.querySelector('a[data-item-id="authority"], a[aria-label*="Website"], a[aria-label*="Situs"], a[data-tooltip*="Situs"], a[data-tooltip*="website"]');
-      let website = webBtn ? (webBtn as HTMLAnchorElement).href : null;
+      // 2. Find website
+      // Try data-item-id="authority"
+      const webEl = document.querySelector('[data-item-id="authority"]');
+      let website = webEl ? (webEl as HTMLAnchorElement).href : null;
 
+      // Try specific aria-labels
       if (!website) {
-        // Fallback: search for any link that looks like a business website
+        const webBtn = document.querySelector('a[aria-label*="Website"], a[aria-label*="Situs"], a[data-tooltip*="Situs"], a[data-tooltip*="website"]');
+        website = webBtn ? (webBtn as HTMLAnchorElement).href : null;
+      }
+
+      // Fallback: search for any link that looks like a business website (not Google)
+      if (!website) {
         const allLinks = Array.from(document.querySelectorAll('a[href^="http"]'));
         const businessLink = allLinks.find(a => {
           const href = (a as HTMLAnchorElement).href;
-          return !href.includes('google.com/maps') && !href.includes('google.com/search') && !href.includes('gstatic.com');
+          const label = (a as HTMLElement).innerText || '';
+          return !href.includes('google.com') && !href.includes('gstatic.com') && !href.includes('apple.com') &&
+                 (label.toLowerCase().includes('situs') || label.toLowerCase().includes('website') || href.length > 5);
         });
         website = businessLink ? (businessLink as HTMLAnchorElement).href : null;
       }
