@@ -183,20 +183,21 @@ async function findEmailFromWebsite(context: BrowserContext, url: string): Promi
  */
 async function scrollResults(page: Page, limit: number): Promise<void> {
   const scrollContainerSelector = 'div[role="feed"], div[aria-label^="Results"], .m6qeH.tL9Q4c';
-  const maxScrollAttempts = 20;
+  const maxScrollAttempts = 15; // Reduced for speed
   let scrollAttempts = 0;
 
   console.log(`Mulai scrolling untuk mencari hingga ${limit} data...`);
 
   while (scrollAttempts < maxScrollAttempts) {
     const itemsCount = (await page.$$('div[role="article"]')).length;
-    if (itemsCount >= limit * 1.5) break;
+    if (itemsCount >= limit * 1.2) break; // Early break if we have enough items
 
     const isEndReached = await page.evaluate(() => {
       const endText = document.body.innerText;
       return endText.includes("You've reached the end of the list.") ||
              endText.includes("Hasil akhir daftar") ||
-             endText.includes("Tidak ada hasil lagi");
+             endText.includes("Tidak ada hasil lagi") ||
+             endText.includes("Gak ada hasil lagi");
     });
 
     if (isEndReached) break;
@@ -204,13 +205,14 @@ async function scrollResults(page: Page, limit: number): Promise<void> {
     await page.evaluate((selector) => {
       const container = document.querySelector(selector);
       if (container) {
-        container.scrollTop += 1500;
+        container.scrollTop += 2000; // Increased scroll distance
       } else {
-        window.scrollBy(0, 1500);
+        window.scrollBy(0, 2000);
       }
     }, scrollContainerSelector);
 
-    await page.waitForTimeout(2000);
+    // Dynamic wait: wait less if we are on a remote browser
+    await page.waitForTimeout(1000);
     scrollAttempts++;
   }
 }
@@ -362,6 +364,8 @@ export async function scrapeGoogleMaps({
     userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36',
     locale: 'id-ID',
     timezoneId: 'Asia/Jakarta',
+    geolocation: { longitude: 106.8272, latitude: -6.1751 }, // Force Jakarta location
+    permissions: ['geolocation'],
     viewport: { width: 1280, height: 720 }
   });
   const page = await context.newPage();
@@ -384,6 +388,8 @@ export async function scrapeGoogleMaps({
     await scrollResults(page, limit);
 
     const items = await page.$$('div[role="article"]');
+    console.log(`Ditemukan ${items.length} elemen hasil pencarian.`);
+
     if (items.length === 0) {
       throw new Error(`Tidak ditemukan hasil untuk "${query}" di "${location}".`);
     }
@@ -391,13 +397,15 @@ export async function scrapeGoogleMaps({
     const leads: ScrapeResult[] = [];
     const seenNames = new Set<string>();
 
-    for (const item of items) {
+    for (const [index, item] of items.entries()) {
       if (leads.length >= limit) break;
 
+      console.log(`Memproses item ke-${index + 1}/${items.length}...`);
       const lead = await extractLeadDetails(page, item, baseCoords);
       if (lead && !seenNames.has(lead.name)) {
         seenNames.add(lead.name);
         leads.push(lead);
+        console.log(`Berhasil mengambil: ${lead.name}`);
       }
     }
 
