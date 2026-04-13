@@ -1,5 +1,6 @@
 'use client'
 
+import { useState } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -21,16 +22,44 @@ interface LeadsGridProps {
   setViewingLead: (lead: Lead) => void
   onReset: () => void
   onOpenTemplates: () => void
+  onUpdateLead?: (oldLead: Lead, updatedLead: Lead) => void
   isProcessing?: boolean
 }
 
-export function LeadCard({ lead, selectedLead, setSelectedLead, setViewingLead, onOpenTemplates }: {
+export function LeadCard({ lead, selectedLead, setSelectedLead, setViewingLead, onOpenTemplates, onUpdateLead }: {
   lead: Lead,
   selectedLead: Lead | null,
   setSelectedLead: (lead: Lead) => void,
   setViewingLead: (lead: Lead) => void,
-  onOpenTemplates: () => void
+  onOpenTemplates: () => void,
+  onUpdateLead?: (oldLead: Lead, updatedLead: Lead) => void
 }) {
+  const [isEnriching, setIsEnriching] = useState(false);
+
+  const enrichLead = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!lead.website || isEnriching) return;
+
+    setIsEnriching(true);
+    try {
+      const response = await fetch('/api/enrich', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: lead.website }),
+      });
+
+      if (response.ok) {
+        const { email } = await response.json();
+        if (email && onUpdateLead) {
+          onUpdateLead(lead, { ...lead, email });
+        }
+      }
+    } catch (err) {
+      console.error('Failed to enrich lead:', err);
+    } finally {
+      setIsEnriching(false);
+    }
+  };
   return (
     <Card
       onClick={() => setViewingLead(lead)}
@@ -76,11 +105,27 @@ export function LeadCard({ lead, selectedLead, setSelectedLead, setViewingLead, 
                 <span className="truncate">Website N/A</span>
               </div>
             )}
-            <div className="flex items-center gap-2 text-[11px] font-medium text-gray-500">
-              <Mail className="w-3 h-3 text-gray-400" />
-              <span className={`truncate ${lead.email ? '' : 'italic opacity-60'}`}>
-                {lead.email || 'Email N/A'}
-              </span>
+            <div className="flex items-center justify-between gap-2 text-[11px] font-medium text-gray-500">
+              <div className="flex items-center gap-2 truncate">
+                <Mail className="w-3 h-3 text-gray-400" />
+                <span className={`truncate ${lead.email ? '' : 'italic opacity-60'}`}>
+                  {lead.email || 'Email N/A'}
+                </span>
+              </div>
+              {!lead.email && lead.website && (
+                <button
+                  onClick={enrichLead}
+                  disabled={isEnriching}
+                  className="shrink-0 text-[9px] font-bold text-blue-600 hover:text-blue-700 disabled:opacity-50 flex items-center gap-1"
+                >
+                  {isEnriching ? (
+                    <Zap className="w-2 h-2 animate-pulse" />
+                  ) : (
+                    <Zap className="w-2 h-2" />
+                  )}
+                  {isEnriching ? 'Mencari...' : 'Cari Email'}
+                </button>
+              )}
             </div>
           </div>
         </div>

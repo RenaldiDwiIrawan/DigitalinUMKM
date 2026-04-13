@@ -17,6 +17,7 @@ export interface ScrapeOptions {
   limit?: number;
   radius?: number;
   onLeadFound?: (lead: ScrapeResult) => void;
+  shouldScrapeEmail?: boolean;
 }
 
 interface Coordinates {
@@ -71,7 +72,7 @@ function calculateDistance(coord1: Coordinates, coord2: Coordinates): number {
 /**
  * Tries to find an email address on a given website URL.
  */
-async function findEmailFromWebsite(context: BrowserContext, url: string): Promise<string | null> {
+export async function findEmailFromWebsite(context: BrowserContext, url: string): Promise<string | null> {
   if (!url) return null;
 
   const page = await context.newPage();
@@ -149,14 +150,13 @@ async function scrollResults(page: Page, limit: number): Promise<void> {
 
   while (scrollAttempts < maxScrollAttempts) {
     const itemsCount = (await page.$$('div[role="article"]')).length;
-    if (itemsCount >= limit * 1.2) break; // Early break if we have enough items
+    if (itemsCount >= limit * 1.5) break; // Increased buffer for speed
 
     const isEndReached = await page.evaluate(() => {
       const endText = document.body.innerText;
       return endText.includes("You've reached the end of the list.") ||
              endText.includes("Hasil akhir daftar") ||
-             endText.includes("Tidak ada hasil lagi") ||
-             endText.includes("Gak ada hasil lagi");
+             endText.includes("Tidak ada hasil lagi");
     });
 
     if (isEndReached) break;
@@ -164,14 +164,14 @@ async function scrollResults(page: Page, limit: number): Promise<void> {
     await page.evaluate((selector) => {
       const container = document.querySelector(selector);
       if (container) {
-        container.scrollTop += 2000; // Increased scroll distance
+        container.scrollTop += 3000; // Increased scroll distance
       } else {
-        window.scrollBy(0, 2000);
+        window.scrollBy(0, 3000);
       }
     }, scrollContainerSelector);
 
-    // Dynamic wait: wait less if we are on a remote browser
-    await page.waitForTimeout(1000);
+    // Faster wait for scroll to settle
+    await page.waitForTimeout(600);
     scrollAttempts++;
   }
 }
@@ -215,6 +215,19 @@ async function extractLeadDetails(page: Page, item: Locator, baseCoords: Coordin
       return { phone: null, website: null, distance: null };
     });
 
+    // OPTIMIZATION: If we already have phone and website from the list view,
+    // we can skip the expensive click and panel wait to save time on Vercel.
+    if (listDetails.phone && listDetails.website) {
+      console.log(`[Fast Pass] Found details in list view for ${name}`);
+      return {
+        name,
+        phone: listDetails.phone,
+        website: listDetails.website,
+        distance: listDetails.distance,
+        email: null
+      };
+    }
+
     // Ensure element is visible before clicking
     await item.scrollIntoViewIfNeeded({ timeout: 2000 }).catch(() => {});
 
@@ -228,6 +241,17 @@ async function extractLeadDetails(page: Page, item: Locator, baseCoords: Coordin
     try {
       // Wait for the detail panel to appear
       await page.waitForSelector('.DUwDvf', { timeout: 8000 });
+
+      // Verify that the detail panel matches the lead we clicked
+      // This prevents "data leakage" from the previous lead's side panel
+      let panelName = '';
+      for (let i = 0; i < 5; i++) {
+        panelName = await page.locator('.DUwDvf').first().innerText().catch(() => '');
+        if (panelName.toLowerCase().includes(name.toLowerCase()) || name.toLowerCase().includes(panelName.toLowerCase())) {
+          break;
+        }
+        await page.waitForTimeout(500);
+      }
 
       // Small delay for panel content to settle
       await page.waitForTimeout(500);
@@ -249,9 +273,11 @@ async function extractLeadDetails(page: Page, item: Locator, baseCoords: Coordin
 
       const panelDetails = await page.evaluate(() => {
         // Helper to find by data-item-id patterns
+        // We look for elements that are likely part of the active side panel
         const findByItemId = (pattern: string) => {
           const el = Array.from(document.querySelectorAll('[data-item-id]')).find(el =>
-            (el.getAttribute('data-item-id') || '').includes(pattern)
+            (el.getAttribute('data-item-id') || '').includes(pattern) &&
+            (el as HTMLElement).offsetParent !== null // Ensure it's visible
           );
           return el ? (el as HTMLElement).innerText.trim() : null;
         };
@@ -259,25 +285,31 @@ async function extractLeadDetails(page: Page, item: Locator, baseCoords: Coordin
         // 1. Find phone
         let phone = findByItemId('phone:tel:');
         if (!phone) {
-          const phoneLinks = Array.from(document.querySelectorAll('a[href^="tel:"]'));
+          // Search only in visible links
+          const phoneLinks = Array.from(document.querySelectorAll('a[href^="tel:"]'))
+            .filter(el => (el as HTMLElement).offsetParent !== null);
           phone = phoneLinks.length > 0 ? (phoneLinks[0] as HTMLAnchorElement).href.replace('tel:', '').trim() : null;
+        }
+
+        // 2. Find website
+        // Authority is the data-item-id for the website button
+        const webEl = Array.from(document.querySelectorAll('[data-item-id="authority"]'))
+          .find(el => (el as HTMLElement).offsetParent !== null);
+        let website = webEl ? (webEl as HTMLAnchorElement).href : null;
+
+        if (!website) {
+          const webBtn = Array.from(document.querySelectorAll('a[aria-label*="Website"], a[aria-label*="Situs"], a[data-tooltip*="Situs"], a[data-tooltip*="website"]'))
+            .find(el => (el as HTMLElement).offsetParent !== null);
+          website = webBtn ? (webBtn as HTMLAnchorElement).href : null;
         }
 
         if (!phone) {
           const phoneBtn = Array.from(document.querySelectorAll('button, a, span')).find(el => {
+            if ((el as HTMLElement).offsetParent === null) return false;
             const text = (el as HTMLElement).innerText || '';
             return /^(\+62|62|0)8[1-9][0-9]{7,11}$/.test(text.replace(/[\s\-]/g, ''));
           });
           phone = phoneBtn ? (phoneBtn as HTMLElement).innerText.trim() : null;
-        }
-
-        // 2. Find website
-        const webEl = document.querySelector('[data-item-id="authority"]');
-        let website = webEl ? (webEl as HTMLAnchorElement).href : null;
-
-        if (!website) {
-          const webBtn = document.querySelector('a[aria-label*="Website"], a[aria-label*="Situs"], a[data-tooltip*="Situs"], a[data-tooltip*="website"]');
-          website = webBtn ? (webBtn as HTMLAnchorElement).href : null;
         }
 
         if (phone) phone = phone.replace(/[^\d\s\-\+\(\)]/g, '').trim();
@@ -321,6 +353,47 @@ async function extractLeadDetails(page: Page, item: Locator, baseCoords: Coordin
 }
 
 /**
+ * Extracts basic details for ALL visible leads in the results list without clicking.
+ * This is much faster and helps avoid Vercel timeouts.
+ */
+async function extractAllLeadsFromView(page: Page): Promise<ScrapeResult[]> {
+  return await page.evaluate(() => {
+    const items = Array.from(document.querySelectorAll('div[role="article"]'));
+    return items.map(el => {
+      const name = el.getAttribute('aria-label') || 'Unknown';
+      const text = (el as HTMLElement).innerText;
+
+      // Improved Indonesian phone regex
+      const phoneMatch = text.match(/(?:\+62|62|0)8[1-9][0-9]{7,11}/) ||
+                        text.match(/(\+62|08)\d{2,4}[-\s]?\d{3,4}[-\s]?\d{3,4}/);
+
+      const distanceMatch = text.match(/\d+([.,]\d+)?\s*(km|m)\b/i);
+
+      // Extract website from the globe icon link if present
+      const webBtn = el.querySelector('a[aria-label*="Website"], a[aria-label*="Situs"], a[data-value="Website"]');
+      let website = webBtn ? (webBtn as HTMLAnchorElement).href : null;
+
+      if (website && (
+        website.includes('google.com/maps') ||
+        website.includes('google.com/search') ||
+        website.includes('javascript:') ||
+        website.includes('arenacorp.com')
+      )) {
+        website = null;
+      }
+
+      return {
+        name,
+        phone: phoneMatch ? phoneMatch[0] : null,
+        website,
+        distance: distanceMatch ? distanceMatch[0] : null,
+        email: null
+      };
+    });
+  });
+}
+
+/**
  * Main function to scrape Google Maps leads.
  */
 export async function scrapeGoogleMaps(options: ScrapeOptions): Promise<ScrapeResult[]> {
@@ -331,7 +404,8 @@ export async function scrapeGoogleMaps(options: ScrapeOptions): Promise<ScrapeRe
     lng,
     limit = 10,
     radius,
-    onLeadFound
+    onLeadFound,
+    shouldScrapeEmail = false
   } = options;
 
   const browser = await getBrowser();
@@ -382,8 +456,8 @@ export async function scrapeGoogleMaps(options: ScrapeOptions): Promise<ScrapeRe
       console.log('Peringatan: Tidak dapat mendeteksi koordinat lokasi spesifik dari URL. Menggunakan koordinat pusat Jakarta sebagai fallback.');
     }
 
-    // Initial scroll
-    await scrollResults(page, limit);
+    // Initial scroll - more conservative if we have a radius filter
+    await scrollResults(page, radius ? Math.min(limit, 20) : limit);
 
     const leads: ScrapeResult[] = [];
     const seenNames = new Set<string>();
@@ -391,9 +465,38 @@ export async function scrapeGoogleMaps(options: ScrapeOptions): Promise<ScrapeRe
 
     let processedIndex = 0;
     let consecutiveFailures = 0;
+    let consecutiveOutsideRadius = 0;
     const maxItemsToProcess = radius ? 150 : 100; // Process more items if we are filtering by radius
 
     console.log(`Mulai memproses hasil pencarian (Radius: ${radius ? radius + 'km' : 'Tidak dibatasi'})...`);
+
+    // --- NEW: Fast Bulk Extraction ---
+    const bulkLeads = await extractAllLeadsFromView(page);
+    console.log(`Berhasil mengekstrak ${bulkLeads.length} data awal dari list view.`);
+
+    for (const lead of bulkLeads) {
+      if (leads.length >= limit) break;
+      if (seenNames.has(lead.name)) continue;
+
+      // Apply radius filtering to bulk results
+      if (radius && lead.distance) {
+        const distMatch = lead.distance.match(/(\d+([.,]\d+)?)\s*(km|m)/i);
+        if (distMatch) {
+          let distVal = parseFloat(distMatch[1].replace(',', '.'));
+          if (distMatch[3].toLowerCase() === 'm') distVal /= 1000;
+          if (distVal > radius) continue;
+        }
+      }
+
+      // If lead is good enough (has phone or website), add it immediately
+      if (lead.phone || lead.website) {
+        seenNames.add(lead.name);
+        leads.push(lead);
+        if (onLeadFound) onLeadFound(lead);
+        console.log(`[Fast Pass] ${lead.name} (${lead.distance || 'N/A'})`);
+      }
+    }
+    // ---------------------------------
 
     while (leads.length < limit && processedIndex < maxItemsToProcess) {
       let currentCount = await itemsLocator.count();
@@ -407,6 +510,14 @@ export async function scrapeGoogleMaps(options: ScrapeOptions): Promise<ScrapeRe
       }
 
       const item = itemsLocator.nth(processedIndex);
+      const name = await item.getAttribute('aria-label').catch(() => null);
+
+      // Skip if we already processed this name in bulk extraction
+      if (name && seenNames.has(name)) {
+        processedIndex++;
+        continue;
+      }
+
       const lead = await extractLeadDetails(page, item, baseCoords);
 
       if (lead) {
@@ -422,9 +533,21 @@ export async function scrapeGoogleMaps(options: ScrapeOptions): Promise<ScrapeRe
             if (unit === 'm') distVal = distVal / 1000;
 
             if (distVal > radius) {
-              console.log(`Melompati ${lead.name} karena jaraknya ${distVal.toFixed(1)}km (melebihi radius ${radius}km)`);
+              consecutiveOutsideRadius++;
+              console.log(`Melompati ${lead.name} karena jaraknya ${distVal.toFixed(1)}km (melebihi radius ${radius}km). Total berturut-turut: ${consecutiveOutsideRadius}`);
+
+              // If we find any results in a row outside the radius, stop searching quickly
+              // User requested to only try 1 more time if a result is outside the radius
+              if (consecutiveOutsideRadius >= 2) {
+                console.log(`Berhenti mencari: Sudah ${consecutiveOutsideRadius} data di luar radius berturut-turut.`);
+                break;
+              }
+
               processedIndex++;
               continue;
+            } else {
+              // Reset counter if we find a result inside the radius
+              consecutiveOutsideRadius = 0;
             }
           }
         }
@@ -433,8 +556,8 @@ export async function scrapeGoogleMaps(options: ScrapeOptions): Promise<ScrapeRe
         if (!seenNames.has(lead.name)) {
           seenNames.add(lead.name);
 
-          // Enrich with email immediately if website exists
-          if (lead.website) {
+          // Enrich with email only if requested (this is very slow and often causes Vercel timeouts)
+          if (shouldScrapeEmail && lead.website) {
             console.log(`Mencari email untuk ${lead.name} di ${lead.website}...`);
             lead.email = await findEmailFromWebsite(context, lead.website);
           }

@@ -111,6 +111,13 @@ export default function ScraperDashboard() {
     setIsProcessing(false)
   }
 
+  const handleUpdateLead = (oldLead: Lead, updatedLead: Lead) => {
+    setLeads(prev => prev.map(l => l.name === oldLead.name ? updatedLead : l));
+    if (selectedLead?.name === oldLead.name) {
+      setSelectedLead(updatedLead);
+    }
+  }
+
   return (
     <div className="min-h-screen bg-mesh font-sans selection:bg-blue-100 selection:text-blue-900">
       <Navigation onOpenTemplates={() => setIsTemplateModalOpen(true)} />
@@ -153,6 +160,7 @@ export default function ScraperDashboard() {
               setViewingLead={setViewingLead}
               onReset={handleReset}
               onOpenTemplates={() => setIsTemplateModalOpen(true)}
+              onUpdateLead={handleUpdateLead}
               isProcessing={isProcessing}
             />
           </div>
