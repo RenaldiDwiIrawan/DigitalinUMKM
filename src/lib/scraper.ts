@@ -367,8 +367,13 @@ export async function scrapeGoogleMaps({
   const searchUrl = `https://www.google.com/maps/search/${encodeURIComponent(searchQuery)}`;
 
   try {
-    await page.goto(searchUrl, { waitUntil: 'networkidle' });
-    await page.waitForSelector('div[role="article"]', { timeout: 20000 });
+    await page.goto(searchUrl, { waitUntil: 'load', timeout: 30000 });
+    try {
+      await page.waitForSelector('div[role="article"]', { timeout: 15000 });
+    } catch (e) {
+      console.log('Menunggu elemen hasil lebih lama...');
+      await page.waitForSelector('div[role="article"]', { timeout: 15000 });
+    }
 
     // Enhanced base coordinate detection
     // Wait for URL to update with coordinates (contains @lat,lng)
