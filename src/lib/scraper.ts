@@ -295,30 +295,21 @@ async function extractLeadDetails(page: Page, item: any, baseCoords: Coordinates
       }
 
       // 2. Find website
-      // Try data-item-id="authority"
+      // Try data-item-id="authority" (The most reliable way in Google Maps)
       const webEl = document.querySelector('[data-item-id="authority"]');
       let website = webEl ? (webEl as HTMLAnchorElement).href : null;
 
-      // Try specific aria-labels
+      // Try specific aria-labels/tooltips if authority ID is missing
       if (!website) {
         const webBtn = document.querySelector('a[aria-label*="Website"], a[aria-label*="Situs"], a[data-tooltip*="Situs"], a[data-tooltip*="website"]');
         website = webBtn ? (webBtn as HTMLAnchorElement).href : null;
       }
 
-      // Fallback: search for any link that looks like a business website (not Google)
-      if (!website) {
-        const allLinks = Array.from(document.querySelectorAll('a[href^="http"]'));
-        const businessLink = allLinks.find(a => {
-          const href = (a as HTMLAnchorElement).href;
-          const label = (a as HTMLElement).innerText || '';
-          return !href.includes('google.com') && !href.includes('gstatic.com') && !href.includes('apple.com') &&
-                 (label.toLowerCase().includes('situs') || label.toLowerCase().includes('website') || href.length > 5);
-        });
-        website = businessLink ? (businessLink as HTMLAnchorElement).href : null;
-      }
+      // NO FALLBACK for generic links. If Google doesn't explicitly label it as a website,
+      // it's likely unrelated (like reviewer profiles or social links in descriptions).
 
       if (phone) phone = phone.replace(/[^\d\s\-\+\(\)]/g, '').trim();
-      if (website && (website.includes('google.com/maps') || website.includes('javascript:'))) website = null;
+      if (website && (website.includes('google.com/maps') || website.includes('google.com/search') || website.includes('javascript:'))) website = null;
 
       return { phone, website };
     });

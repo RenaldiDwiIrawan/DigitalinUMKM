@@ -175,16 +175,16 @@ Jarak: ${viewingLead.distance || 'N/A'}
                       <Globe className="w-4 h-4" />
                     </div>
                     <div className="min-w-0">
-                      <div className="text-sm font-semibold text-blue-600 truncate hover:underline">
+                      <div className={`text-sm font-semibold truncate ${viewingLead.website ? 'text-blue-600 hover:underline' : 'text-gray-400 italic'}`}>
                         {viewingLead.website ? (
                           <a href={viewingLead.website} target="_blank" rel="noopener noreferrer">
                             {viewingLead.website.replace(/^https?:\/\//, '')}
                           </a>
                         ) : (
-                          <span className="text-gray-400">N/A</span>
+                          'Website tidak ditemukan'
                         )}
                       </div>
-                      <div className="text-[9px] text-gray-400 font-medium uppercase tracking-wider">Website</div>
+                      <div className="text-[9px] text-gray-400 font-medium uppercase tracking-wider">Website Resmi</div>
                     </div>
                   </div>
                 </div>

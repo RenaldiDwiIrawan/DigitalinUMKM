@@ -69,6 +69,12 @@ export function LeadCard({ lead, selectedLead, setSelectedLead, setViewingLead, 
                 <span className="truncate">{lead.website.replace(/^https?:\/\//, '').split('/')[0]}</span>
               </div>
             )}
+            {!lead.website && (
+              <div className="flex items-center gap-2 text-[11px] font-medium text-gray-400 italic opacity-60">
+                <Globe className="w-3 h-3" />
+                <span className="truncate">Website N/A</span>
+              </div>
+            )}
             <div className="flex items-center gap-2 text-[11px] font-medium text-gray-500">
               <Mail className="w-3 h-3 text-gray-400" />
               <span className={`truncate ${lead.email ? '' : 'italic opacity-60'}`}>
