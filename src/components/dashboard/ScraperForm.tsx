@@ -21,15 +21,18 @@ interface ScraperFormProps {
 
 export function ScraperForm({ form, setForm, handleScrape, onReset, isPending, error }: ScraperFormProps) {
   return (
-    <Card className="glass overflow-hidden border-0 shadow-2xl shadow-blue-900/5 ring-1 ring-white/20 mb-10 rounded-[2.5rem]">
-      <CardHeader className="bg-white/40 pb-5 border-b border-white/20">
-        <CardTitle className="text-xl font-black tracking-tighter uppercase text-gray-900">Parameter Pencarian</CardTitle>
+    <Card className="bg-white overflow-hidden border border-gray-100 shadow-sm mb-8 rounded-3xl transition-all hover:shadow-md">
+      <CardHeader className="bg-gray-50/50 pb-4 border-b border-gray-100 px-8 py-6">
+        <CardTitle className="text-lg font-bold tracking-tight text-gray-900 flex items-center gap-2">
+          <Sparkles className="w-5 h-5 text-blue-600" />
+          Parameter Pencarian
+        </CardTitle>
       </CardHeader>
 
       <CardContent className="p-8">
-        <form onSubmit={handleScrape} className="space-y-8">
-          <div className="space-y-3">
-            <label className="block text-[11px] font-black text-blue-700/80 uppercase tracking-[0.2em] mb-2 px-1">
+        <form onSubmit={handleScrape} className="space-y-6">
+          <div className="space-y-2">
+            <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-2 px-1">
               Jenis Bisnis
             </label>
             <div className="relative group">
@@ -40,13 +43,13 @@ export function ScraperForm({ form, setForm, handleScrape, onReset, isPending, e
                 onChange={(e) => setForm({ ...form, query: e.target.value })}
                 placeholder="Contoh: Cafe, Petshop, Klinik"
                 required
-                className="h-12 pl-11 bg-white/50 border-white/60 focus:bg-white focus:ring-blue-600/30 rounded-xl font-bold text-gray-900 placeholder:text-gray-400"
+                className="h-12 pl-11 bg-white border-gray-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/5 rounded-xl font-semibold text-gray-900 placeholder:text-gray-400 transition-all"
               />
             </div>
           </div>
 
-          <div className="space-y-3">
-            <label className="block text-[11px] font-black text-blue-700/80 uppercase tracking-[0.2em] mb-2 px-1">
+          <div className="space-y-2">
+            <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-2 px-1">
               Lokasi Target
             </label>
             <div className="relative group">
@@ -57,14 +60,14 @@ export function ScraperForm({ form, setForm, handleScrape, onReset, isPending, e
                 onChange={(e) => setForm({ ...form, location: e.target.value })}
                 placeholder="Contoh: Bekasi, Jakarta Selatan"
                 required
-                className="h-12 pl-11 bg-white/50 border-white/60 focus:bg-white focus:ring-blue-600/30 rounded-xl font-bold text-gray-900 placeholder:text-gray-400"
+                className="h-12 pl-11 bg-white border-gray-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/5 rounded-xl font-semibold text-gray-900 placeholder:text-gray-400 transition-all"
               />
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-5">
-            <div className="space-y-3">
-              <label className="block text-[11px] font-black text-blue-700/80 uppercase tracking-[0.2em] mb-2 px-1">
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-2 px-1">
                 Radius (KM)
               </label>
               <div className="relative group">
@@ -76,12 +79,12 @@ export function ScraperForm({ form, setForm, handleScrape, onReset, isPending, e
                   min="1"
                   max="50"
                   placeholder="5"
-                  className="h-12 pl-11 bg-white/50 border-white/60 focus:bg-white focus:ring-blue-600/30 rounded-xl font-bold text-gray-900 placeholder:text-gray-400"
+                  className="h-12 pl-11 bg-white border-gray-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/5 rounded-xl font-semibold text-gray-900 placeholder:text-gray-400 transition-all"
                 />
               </div>
             </div>
-            <div className="space-y-3">
-              <label className="block text-[11px] font-black text-blue-700/80 uppercase tracking-[0.2em] mb-2 px-1">
+            <div className="space-y-2">
+              <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-2 px-1">
                 Limit Data
               </label>
               <div className="relative group">
@@ -93,26 +96,28 @@ export function ScraperForm({ form, setForm, handleScrape, onReset, isPending, e
                   min="1"
                   max="50"
                   placeholder="20"
-                  className="h-12 pl-11 bg-white/50 border-white/60 focus:bg-white focus:ring-blue-600/30 rounded-xl font-bold text-gray-900 placeholder:text-gray-400"
+                  className="h-12 pl-11 bg-white border-gray-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/5 rounded-xl font-semibold text-gray-900 placeholder:text-gray-400 transition-all"
                 />
               </div>
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-5 pt-2">
+          <div className="flex flex-col sm:flex-row gap-3 pt-2">
             <Button
               type="submit"
               disabled={isPending}
-              variant="premium"
-              className="flex-1 h-14 rounded-xl text-[10px] font-black uppercase tracking-[0.2em] shadow-2xl shadow-blue-600/20 flex items-center justify-center gap-2"
+              className="flex-1 h-12 rounded-xl text-xs font-bold uppercase tracking-wider bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-600/20 transition-all flex items-center justify-center gap-2"
             >
               {isPending ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" />
-                  Memproses...
+                  Mencari...
                 </>
               ) : (
-                "Mulai"
+                <>
+                  <Search className="w-4 h-4" />
+                  Mulai Pencarian
+                </>
               )}
             </Button>
             <Button
@@ -121,8 +126,8 @@ export function ScraperForm({ form, setForm, handleScrape, onReset, isPending, e
                 onReset();
                 window.scrollTo({ top: 0, behavior: 'smooth' });
               }}
-              variant="outline"
-              className="h-14 rounded-xl border-2 border-white/50 bg-white/30 text-gray-500 hover:bg-white hover:text-red-600 hover:border-red-100 transition-all font-black uppercase tracking-[0.2em] text-[9px]"
+              variant="ghost"
+              className="h-12 px-6 rounded-xl text-xs font-bold uppercase tracking-wider text-gray-400 hover:text-red-500 hover:bg-red-50 transition-all"
             >
               Reset
             </Button>
@@ -130,19 +135,16 @@ export function ScraperForm({ form, setForm, handleScrape, onReset, isPending, e
         </form>
 
         {error && (
-          <div className="mt-6 p-5 bg-red-50 border border-red-100 text-red-700 rounded-2xl animate-in fade-in slide-in-from-top-4 duration-500">
+          <div className="mt-6 p-4 bg-red-50 border border-red-100 text-red-700 rounded-2xl animate-in fade-in slide-in-from-top-2 duration-300">
             <div className="flex gap-3">
-              <div className="w-8 h-8 bg-red-100 rounded-lg flex items-center justify-center text-lg shrink-0">
-                <AlertTriangle className="w-4 h-4 text-red-600" />
-              </div>
+              <AlertTriangle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
               <div className="flex-1 min-w-0">
-                <p className="font-black mb-0.5 text-red-900 uppercase tracking-wider text-[9px]">Error Detected</p>
+                <p className="font-bold text-[10px] text-red-900 uppercase tracking-wider mb-1">Gagal Memuat Data</p>
                 <p className="text-xs font-medium leading-relaxed opacity-80 break-words">{error}</p>
               </div>
             </div>
           </div>
         )}
-
       </CardContent>
     </Card>
   )

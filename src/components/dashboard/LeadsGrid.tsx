@@ -33,72 +33,66 @@ export function LeadCard({ lead, selectedLead, setSelectedLead, setViewingLead, 
   return (
     <Card
       onClick={() => setViewingLead(lead)}
-      className="group bg-white/40 hover:bg-white hover:border-blue-600 hover:shadow-[0_20px_50px_rgba(37,99,235,0.08)] transition-all duration-500 cursor-pointer relative overflow-hidden flex flex-col justify-between border-white/20 hover:scale-[1.02] rounded-[1.5rem] h-full"
+      className="group bg-white hover:border-blue-500 hover:shadow-xl transition-all duration-300 cursor-pointer relative overflow-hidden flex flex-col justify-between border-gray-100 rounded-2xl h-full shadow-sm"
     >
       <CardContent className="p-5 flex flex-col h-full">
         <div className="flex justify-between items-start mb-4 shrink-0">
-          <div className="w-10 h-10 bg-gradient-to-br from-blue-50 to-indigo-50 text-blue-600 rounded-xl flex items-center justify-center text-base font-black group-hover:from-blue-600 group-hover:to-indigo-600 group-hover:text-white transition-all duration-500 shadow-sm">
+          <div className="w-10 h-10 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center text-sm font-bold group-hover:bg-blue-600 group-hover:text-white transition-all duration-300">
             {lead.name.charAt(0)}
           </div>
           {lead.distance ? (
-            <Badge variant="secondary" className="bg-white/60 backdrop-blur-sm text-blue-600 border border-white/40 px-2.5 py-0.5 text-[9px] font-black uppercase tracking-wider">
+            <div className="bg-gray-50 text-gray-500 px-2 py-0.5 rounded-full text-[10px] font-semibold border border-gray-100">
               {lead.distance}
-            </Badge>
+            </div>
           ) : (
-            <Badge variant="outline" className="bg-gray-50/50 text-gray-400 border-none px-2.5 py-0.5 text-[9px] font-bold uppercase tracking-wider">
+            <div className="bg-gray-50/50 text-gray-400 px-2 py-0.5 rounded-full text-[10px] font-medium border border-transparent">
               ± 2.5 km
-            </Badge>
+            </div>
           )}
         </div>
 
         <div className="text-left mb-4 flex-1 flex flex-col">
-          <h3 className="text-base font-black text-gray-900 mb-3 group-hover:text-blue-600 transition-colors leading-tight min-h-[2.25rem] flex items-center tracking-tight">
+          <h3 className="text-sm font-bold text-gray-900 mb-3 group-hover:text-blue-600 transition-colors leading-tight min-h-[2.5rem] flex items-start tracking-tight">
             {lead.name}
           </h3>
 
-          <div className="space-y-2.5 mt-auto">
+          <div className="space-y-2 mt-auto">
             {lead.phone && (
-              <div className="flex items-center gap-2.5 text-[10px] font-bold text-gray-600 hover:text-blue-600 transition-colors">
-                <div className="w-7 h-7 rounded-lg bg-white/50 flex items-center justify-center group-hover:bg-blue-50 transition-colors shrink-0 shadow-sm">
-                  <Phone className="w-2.5 h-2.5" />
-                </div>
-                <span className="tracking-tight break-all">{lead.phone}</span>
+              <div className="flex items-center gap-2 text-[11px] font-medium text-gray-500">
+                <Phone className="w-3 h-3 text-blue-400" />
+                <span className="truncate">{lead.phone}</span>
               </div>
             )}
             {lead.website && (
-              <div className="flex items-center gap-2.5 text-[10px] font-bold text-gray-600 hover:text-blue-600 transition-colors">
-                <div className="w-7 h-7 rounded-lg bg-white/50 flex items-center justify-center group-hover:bg-blue-50 transition-colors shrink-0 shadow-sm">
-                  <Globe className="w-2.5 h-2.5" />
-                </div>
-                <span className="tracking-tight break-all">{lead.website.replace(/^https?:\/\//, '').split('/')[0]}</span>
+              <div className="flex items-center gap-2 text-[11px] font-medium text-gray-500">
+                <Globe className="w-3 h-3 text-blue-400" />
+                <span className="truncate">{lead.website.replace(/^https?:\/\//, '').split('/')[0]}</span>
               </div>
             )}
-            <div className="flex items-center gap-2.5 text-[10px] font-bold transition-colors">
-              <div className="w-7 h-7 rounded-lg bg-white/50 flex items-center justify-center group-hover:bg-blue-50 transition-colors shrink-0 shadow-sm">
-                <Mail className="w-2.5 h-2.5 text-gray-400 group-hover:text-blue-600" />
-              </div>
-              <span className={`tracking-tight break-all ${lead.email ? 'text-gray-600 hover:text-blue-600' : 'text-gray-300 italic font-normal'}`}>
-                {lead.email || 'Email tidak ditemukan'}
+            <div className="flex items-center gap-2 text-[11px] font-medium text-gray-500">
+              <Mail className="w-3 h-3 text-gray-400" />
+              <span className={`truncate ${lead.email ? '' : 'italic opacity-60'}`}>
+                {lead.email || 'Email N/A'}
               </span>
             </div>
           </div>
         </div>
 
-        <div className="mt-auto pt-4 border-t border-white/20 group-hover:border-blue-50 transition-colors shrink-0">
+        <div className="mt-4 pt-4 border-t border-gray-50 shrink-0">
           <Button
             onClick={(e) => {
               e.stopPropagation();
               setSelectedLead(lead);
               onOpenTemplates();
             }}
-            variant={selectedLead?.name === lead.name ? "premium" : "ghost"}
-            className={`w-full text-[9px] font-black uppercase tracking-[0.2em] h-9 rounded-lg transition-all ${
+            variant={selectedLead?.name === lead.name ? "default" : "outline"}
+            className={`w-full text-[10px] font-bold uppercase tracking-wider h-9 rounded-xl transition-all ${
               selectedLead?.name === lead.name
-                ? "shadow-xl shadow-blue-600/20"
-                : "bg-white/40 text-gray-400 hover:bg-blue-600 hover:text-white border border-white/20"
+                ? "bg-blue-600 hover:bg-blue-700 shadow-md shadow-blue-600/20"
+                : "text-gray-400 border-gray-100 hover:bg-gray-50 hover:text-blue-600 hover:border-blue-200"
             }`}
           >
-            {selectedLead?.name === lead.name ? "TERPILIH" : 'Pilih'}
+            {selectedLead?.name === lead.name ? "Terpilih" : 'Pilih Bisnis'}
           </Button>
         </div>
       </CardContent>
@@ -109,25 +103,25 @@ export function LeadCard({ lead, selectedLead, setSelectedLead, setViewingLead, 
 export function LeadsGrid({ leads, selectedLead, setSelectedLead, setViewingLead, onReset, onOpenTemplates }: LeadsGridProps) {
   return (
     <div className="lg:col-span-8 xl:col-span-9">
-      <div className="glass p-6 md:p-12 rounded-[3.5rem] shadow-2xl shadow-blue-900/5 border-white/20 min-h-[600px]">
-        <div className="flex flex-col md:flex-row justify-between items-center gap-8 mb-16 text-center md:text-left">
+      <div className="bg-white p-8 md:p-10 rounded-3xl shadow-sm border border-gray-100 min-h-[600px]">
+        <div className="flex flex-col md:flex-row justify-between items-center gap-6 mb-12 text-center md:text-left">
           <div>
-            <h2 className="text-4xl font-black text-gray-900 tracking-tighter">Hasil Pencarian</h2>
-            <p className="text-gray-400 text-base mt-2 font-medium tracking-tight">
-              Ditemukan <span className="text-blue-600 font-black">{leads.length}</span> bisnis potensial yang siap dikonversi.
+            <h2 className="text-3xl font-bold text-gray-900 tracking-tight">Hasil Pencarian</h2>
+            <p className="text-gray-500 text-sm mt-1 font-medium">
+              Ditemukan <span className="text-blue-600 font-bold">{leads.length}</span> bisnis potensial yang siap dikonversi.
             </p>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             {leads.length > 0 && (
               <>
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={() => exportToCSV(leads, `leads_${new Date().toISOString().split('T')[0]}`)}
-                  className="bg-white/50 border-white/40 text-blue-600 hover:bg-blue-600 hover:text-white px-6 h-10 rounded-xl text-[10px] font-black uppercase tracking-[0.2em] transition-all flex items-center gap-2"
+                  className="bg-white border-gray-200 text-gray-600 hover:bg-gray-50 px-4 h-9 rounded-xl text-[10px] font-bold uppercase tracking-wider transition-all flex items-center gap-2"
                 >
-                  <Download className="w-3.5 h-3.5" />
-                  Export CSV
+                  <Download className="w-3 h-3" />
+                  CSV
                 </Button>
                 <Button
                   variant="ghost"
@@ -137,9 +131,9 @@ export function LeadsGrid({ leads, selectedLead, setSelectedLead, setViewingLead
                     onReset();
                     window.scrollTo({ top: 0, behavior: 'smooth' });
                   }}
-                  className="text-gray-400 hover:text-red-600 hover:bg-red-50 px-6 h-10 rounded-xl text-[10px] font-black uppercase tracking-[0.2em] border border-white/20 transition-all"
+                  className="text-gray-400 hover:text-red-500 hover:bg-red-50 px-4 h-9 rounded-xl text-[10px] font-bold uppercase tracking-wider transition-all"
                 >
-                  Reset Data
+                  Reset
                 </Button>
               </>
             )}
@@ -147,22 +141,22 @@ export function LeadsGrid({ leads, selectedLead, setSelectedLead, setViewingLead
         </div>
 
         {leads.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-[450px] text-center px-10">
-            <div className="w-20 h-20 bg-gray-50 rounded-[2rem] flex items-center justify-center mb-8 text-gray-200">
-              <Zap className="w-10 h-10 fill-current" />
+          <div className="flex flex-col items-center justify-center h-[400px] text-center px-10">
+            <div className="w-16 h-16 bg-gray-50 rounded-2xl flex items-center justify-center mb-6 text-gray-200">
+              <Zap className="w-8 h-8 fill-current" />
             </div>
-            <h3 className="text-2xl font-black text-gray-900 mb-3 tracking-tight">Belum Ada Data</h3>
-            <p className="text-gray-400 max-w-sm mx-auto text-sm leading-relaxed font-medium">
-              Gunakan filter di samping untuk mencari leads dari Google Maps secara real-time dan mulai transformasi digital Anda.
+            <h3 className="text-xl font-bold text-gray-900 mb-2 tracking-tight">Belum Ada Data</h3>
+            <p className="text-gray-400 max-w-sm mx-auto text-xs leading-relaxed">
+              Gunakan filter di samping untuk mencari leads dari Google Maps secara real-time.
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
             {leads.map((lead, index) => (
               <div
                 key={index}
-                className="animate-in fade-in slide-in-from-bottom-4 duration-500 fill-mode-both flex flex-col h-full"
-                style={{ animationDelay: `${index * 50}ms` }}
+                className="animate-in fade-in slide-in-from-bottom-2 duration-300 fill-mode-both flex flex-col h-full"
+                style={{ animationDelay: `${index * 40}ms` }}
               >
                 <LeadCard
                   lead={lead}
