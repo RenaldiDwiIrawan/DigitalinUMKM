@@ -8,7 +8,8 @@
       "Bash(npm run:*)",
       "WebSearch",
       "WebFetch(domain:www.scrapingbee.com)",
-      "Bash(npx tsx:*)"
+      "Bash(npx tsx:*)",
+      "Bash(curl:*)"
     ]
   }
 }
