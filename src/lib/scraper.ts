@@ -229,10 +229,17 @@ async function extractLeadDetails(page: Page, item: any, baseCoords: Coordinates
       const phoneMatch = text.match(/(?:\+62|62|0)8[1-9][0-9]{7,11}/) || text.match(/(\+62|08)\d{2,4}[-\s]?\d{3,4}[-\s]?\d{3,4}/);
       const distanceMatch = text.match(/\d+([.,]\d+)?\s*(km|m)\b/i);
 
-      // Extract website from globe icon link if present
-      const webBtn = el.querySelector('a[href*="http"]');
+      // Extract website ONLY if it looks like a dedicated website button (globe icon link)
+      // We look for links with specific aria-labels that Google uses in the list view
+      const webBtn = el.querySelector('a[aria-label*="Website"], a[aria-label*="Situs"], a[data-value="Website"]');
       let website = webBtn ? (webBtn as HTMLAnchorElement).href : null;
-      if (website && (website.includes('google.com/maps') || website.includes('javascript:'))) {
+
+      if (website && (
+        website.includes('google.com/maps') ||
+        website.includes('google.com/search') ||
+        website.includes('javascript:') ||
+        website.includes('arenacorp.com') // Specifically exclude portal domains as requested
+      )) {
         website = null;
       }
 
@@ -309,7 +316,21 @@ async function extractLeadDetails(page: Page, item: any, baseCoords: Coordinates
       // it's likely unrelated (like reviewer profiles or social links in descriptions).
 
       if (phone) phone = phone.replace(/[^\d\s\-\+\(\)]/g, '').trim();
-      if (website && (website.includes('google.com/maps') || website.includes('google.com/search') || website.includes('javascript:'))) website = null;
+
+      // Strict website validation
+      if (website) {
+        const lowerWeb = website.toLowerCase();
+        if (
+          lowerWeb.includes('google.com/maps') ||
+          lowerWeb.includes('google.com/search') ||
+          lowerWeb.includes('javascript:') ||
+          lowerWeb.includes('arenacorp.com') || // Specifically exclude portal domains
+          lowerWeb.includes('facebook.com/pages') || // Sometimes generic FB pages
+          lowerWeb.includes('instagram.com/explore')
+        ) {
+          website = null;
+        }
+      }
 
       return { phone, website };
     });
