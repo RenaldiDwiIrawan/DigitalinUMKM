@@ -121,17 +121,28 @@ async function findEmailFromWebsite(context: BrowserContext, url: string): Promi
 
   const searchEmails = async (targetUrl: string) => {
     try {
-      await page.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: 8000 });
+      // Increased timeout for external websites
+      await page.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: 15000 });
       const found = await page.evaluate(() => {
         const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
-        // Search in text but exclude common noise
+        // Search in text and in href="mailto:..."
         const text = document.body.innerText;
-        const matches = text.match(emailRegex);
+        const html = document.body.innerHTML;
+        const combinedText = text + ' ' + html;
+        const matches = combinedText.match(emailRegex);
         if (!matches) return null;
 
         return Array.from(new Set(matches)).find(email => {
           const lower = email.toLowerCase();
-          return !lower.includes('sentry') && !lower.includes('example') && !lower.includes('.png') && !lower.includes('.jpg');
+          // Exclude noise
+          return (
+            !lower.includes('sentry') &&
+            !lower.includes('example') &&
+            !lower.includes('.png') &&
+            !lower.includes('.jpg') &&
+            !lower.includes('.jpeg') &&
+            !lower.includes('.svg')
+          );
         });
       });
       return found;
@@ -157,7 +168,7 @@ async function findEmailFromWebsite(context: BrowserContext, url: string): Promi
     await page.close();
     return email || null;
   } catch (error) {
-    await page.close();
+    if (!page.isClosed()) await page.close();
     return null;
   }
 }
@@ -209,10 +220,11 @@ async function extractLeadDetails(page: Page, item: any, baseCoords: Coordinates
     // Get fallback details from list view before clicking
     const listDetails = await item.evaluate((el: HTMLElement) => {
       const text = el.innerText;
-      const phoneMatch = text.match(/(\+62|08)\d{2,4}[-\s]?\d{3,4}[-\s]?\d{3,4}/);
-      // Try to get distance from text (e.g. "1.2 km")
+      // Improved Indonesian phone regex
+      const phoneMatch = text.match(/(?:\+62|62|0)8[1-9][0-9]{7,11}/) || text.match(/(\+62|08)\d{2,4}[-\s]?\d{3,4}[-\s]?\d{3,4}/);
       const distanceMatch = text.match(/\d+([.,]\d+)?\s*(km|m)\b/i);
 
+      // Extract website from globe icon link if present
       const webBtn = el.querySelector('a[href*="http"]');
       let website = webBtn ? (webBtn as HTMLAnchorElement).href : null;
       if (website && (website.includes('google.com/maps') || website.includes('javascript:'))) {
@@ -226,13 +238,14 @@ async function extractLeadDetails(page: Page, item: any, baseCoords: Coordinates
       };
     });
 
+    // Click and wait for detail panel
     await item.click();
 
-    // Wait for the detail panel to update and URL to contain coordinates
     try {
-      await page.waitForSelector('h1.DUwDvf', { timeout: 5000 });
-      // Small delay to allow URL to update with place coordinates
-      await page.waitForTimeout(1000);
+      // DUwDvf is the name heading, m6qeH tL9Q4c is the scrollable content
+      await page.waitForSelector('.DUwDvf', { timeout: 8000 });
+      // Extra wait for the data to populate the panel
+      await page.waitForTimeout(1500);
     } catch (e) {
       return { name, ...listDetails, email: null };
     }
@@ -249,30 +262,41 @@ async function extractLeadDetails(page: Page, item: any, baseCoords: Coordinates
     }
 
     const panelDetails = await page.evaluate(() => {
-      const phoneBtn = Array.from(document.querySelectorAll('button, a, span')).find(el => {
-        const label = (el as HTMLElement).getAttribute('aria-label') || '';
-        const text = (el as HTMLElement).innerText || '';
-        const itemId = (el as HTMLElement).getAttribute('data-item-id') || '';
+      // Find phone: looking for specific patterns and tel: links
+      const phoneLinks = Array.from(document.querySelectorAll('a[href^="tel:"]'));
+      let phone = phoneLinks.length > 0 ? (phoneLinks[0] as HTMLAnchorElement).href.replace('tel:', '').trim() : null;
 
-        return (
-          /phone|telepon/i.test(label) ||
-          /phone|telepon/i.test(itemId) ||
-          /^[\d\s\-\+\(\)]{10,}$/.test(text.replace(/\s/g, ''))
-        );
-      });
+      if (!phone) {
+        const phoneBtn = Array.from(document.querySelectorAll('button, a, span')).find(el => {
+          const label = (el as HTMLElement).getAttribute('aria-label') || '';
+          const text = (el as HTMLElement).innerText || '';
+          const itemId = (el as HTMLElement).getAttribute('data-item-id') || '';
 
-      const webBtn = document.querySelector('a[data-item-id="authority"], a[aria-label*="Website"], a[aria-label*="Situs"], a[href*="http"]');
-
-      let phone = phoneBtn ? (phoneBtn as HTMLElement).innerText.trim() : null;
-      // Clean phone number from strange characters like \uE0B0
-      if (phone) {
-        phone = phone.replace(/[^\d\s\-\+\(\)]/g, '').trim();
+          return (
+            /phone|telepon/i.test(label) ||
+            /phone|telepon/i.test(itemId) ||
+            /^(\+62|62|0)8[1-9][0-9]{7,11}$/.test(text.replace(/[\s\-]/g, ''))
+          );
+        });
+        phone = phoneBtn ? (phoneBtn as HTMLElement).innerText.trim() : null;
       }
 
+      // Find website: looking for the website button or any external link in the details section
+      const webBtn = document.querySelector('a[data-item-id="authority"], a[aria-label*="Website"], a[aria-label*="Situs"], a[data-tooltip*="Situs"], a[data-tooltip*="website"]');
       let website = webBtn ? (webBtn as HTMLAnchorElement).href : null;
-      if (website && (website.includes('google.com/maps') || website.includes('javascript:'))) {
-        website = null;
+
+      if (!website) {
+        // Fallback: search for any link that looks like a business website
+        const allLinks = Array.from(document.querySelectorAll('a[href^="http"]'));
+        const businessLink = allLinks.find(a => {
+          const href = (a as HTMLAnchorElement).href;
+          return !href.includes('google.com/maps') && !href.includes('google.com/search') && !href.includes('gstatic.com');
+        });
+        website = businessLink ? (businessLink as HTMLAnchorElement).href : null;
       }
+
+      if (phone) phone = phone.replace(/[^\d\s\-\+\(\)]/g, '').trim();
+      if (website && (website.includes('google.com/maps') || website.includes('javascript:'))) website = null;
 
       return { phone, website };
     });
@@ -300,7 +324,12 @@ export async function scrapeGoogleMaps({
   radius
 }: ScrapeOptions): Promise<ScrapeResult[]> {
   const browser = await getBrowser();
-  const context = await browser.newContext();
+  const context = await browser.newContext({
+    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36',
+    locale: 'id-ID',
+    timezoneId: 'Asia/Jakarta',
+    viewport: { width: 1280, height: 720 }
+  });
   const page = await context.newPage();
 
   const searchQuery = radius ? `${query} near ${location} radius:${radius}km` : `${query} ${location}`;
