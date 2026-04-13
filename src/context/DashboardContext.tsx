@@ -33,51 +33,55 @@ interface DashboardState {
 const DashboardContext = createContext<DashboardState | undefined>(undefined)
 
 export function DashboardProvider({ children }: { children: ReactNode }) {
-  const [leads, setLeads] = useState<Lead[]>(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('digitalin_leads')
-      return saved ? JSON.parse(saved) : []
-    }
-    return []
-  })
-  const [selectedLead, setSelectedLead] = useState<Lead | null>(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('digitalin_selected_lead')
-      return saved ? JSON.parse(saved) : null
-    }
-    return null
-  })
+  const [leads, setLeads] = useState<Lead[]>([])
+  const [selectedLead, setSelectedLead] = useState<Lead | null>(null)
   const [form, setForm] = useState<{
     query: string;
     location: string;
     limit: string | number;
     radius: string | number;
-  }>(() => {
-    const defaultForm = {
-      query: '',
-      location: '',
-      limit: '',
-      radius: ''
-    }
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('digitalin_form')
-      return saved ? JSON.parse(saved) : defaultForm
-    }
-    return defaultForm
+  }>({
+    query: '',
+    location: '',
+    limit: '',
+    radius: ''
   })
 
-  // Persistence Effects
+  const [isInitialized, setIsInitialized] = useState(false)
+
+  // Load initial data from localStorage
   React.useEffect(() => {
+    try {
+      const savedLeads = localStorage.getItem('digitalin_leads')
+      if (savedLeads) setLeads(JSON.parse(savedLeads))
+
+      const savedLead = localStorage.getItem('digitalin_selected_lead')
+      if (savedLead) setSelectedLead(JSON.parse(savedLead))
+
+      const savedForm = localStorage.getItem('digitalin_form')
+      if (savedForm) setForm(JSON.parse(savedForm))
+    } catch (error) {
+      console.error('Failed to load data from localStorage:', error)
+    } finally {
+      setIsInitialized(true)
+    }
+  }, [])
+
+  // Persistence Effects - only save after initial load
+  React.useEffect(() => {
+    if (!isInitialized) return
     localStorage.setItem('digitalin_leads', JSON.stringify(leads))
-  }, [leads])
+  }, [leads, isInitialized])
 
   React.useEffect(() => {
+    if (!isInitialized) return
     localStorage.setItem('digitalin_selected_lead', JSON.stringify(selectedLead))
-  }, [selectedLead])
+  }, [selectedLead, isInitialized])
 
   React.useEffect(() => {
+    if (!isInitialized) return
     localStorage.setItem('digitalin_form', JSON.stringify(form))
-  }, [form])
+  }, [form, isInitialized])
 
   const resetDashboard = () => {
     console.log('Resetting dashboard data...');
