@@ -256,94 +256,87 @@ async function extractLeadDetails(page: Page, item: any, baseCoords: Coordinates
     await item.click();
 
     try {
-      // DUwDvf is the name heading, m6qeH tL9Q4c is the scrollable content
+      // Wait for the URL to change and contain business-specific coordinates
       await page.waitForSelector('.DUwDvf', { timeout: 8000 });
-      // Extra wait for the data to populate the panel
-      await page.waitForTimeout(1500);
+
+      let leadCoords: Coordinates | null = null;
+      for (let i = 0; i < 3; i++) {
+        await page.waitForTimeout(800);
+        leadCoords = extractCoordsFromUrl(page.url());
+        if (leadCoords) break;
+      }
+
+      let distance = listDetails.distance;
+      if (baseCoords && leadCoords) {
+        const distKm = calculateDistance(baseCoords, leadCoords);
+        distance = distKm < 1
+          ? `${(distKm * 1000).toFixed(0)} m`
+          : `${distKm.toFixed(1)} km`;
+      }
+
+      const panelDetails = await page.evaluate(() => {
+        // Helper to find by data-item-id patterns
+        const findByItemId = (pattern: string) => {
+          const el = Array.from(document.querySelectorAll('[data-item-id]')).find(el =>
+            (el.getAttribute('data-item-id') || '').includes(pattern)
+          );
+          return el ? (el as HTMLElement).innerText.trim() : null;
+        };
+
+        // 1. Find phone
+        let phone = findByItemId('phone:tel:');
+        if (!phone) {
+          const phoneLinks = Array.from(document.querySelectorAll('a[href^="tel:"]'));
+          phone = phoneLinks.length > 0 ? (phoneLinks[0] as HTMLAnchorElement).href.replace('tel:', '').trim() : null;
+        }
+
+        if (!phone) {
+          const phoneBtn = Array.from(document.querySelectorAll('button, a, span')).find(el => {
+            const text = (el as HTMLElement).innerText || '';
+            return /^(\+62|62|0)8[1-9][0-9]{7,11}$/.test(text.replace(/[\s\-]/g, ''));
+          });
+          phone = phoneBtn ? (phoneBtn as HTMLElement).innerText.trim() : null;
+        }
+
+        // 2. Find website
+        const webEl = document.querySelector('[data-item-id="authority"]');
+        let website = webEl ? (webEl as HTMLAnchorElement).href : null;
+
+        if (!website) {
+          const webBtn = document.querySelector('a[aria-label*="Website"], a[aria-label*="Situs"], a[data-tooltip*="Situs"], a[data-tooltip*="website"]');
+          website = webBtn ? (webBtn as HTMLAnchorElement).href : null;
+        }
+
+        if (phone) phone = phone.replace(/[^\d\s\-\+\(\)]/g, '').trim();
+
+        if (website) {
+          const lowerWeb = website.toLowerCase();
+          if (
+            lowerWeb.includes('google.com/maps') ||
+            lowerWeb.includes('google.com/search') ||
+            lowerWeb.includes('javascript:') ||
+            lowerWeb.includes('arenacorp.com') ||
+            lowerWeb.includes('facebook.com/pages') ||
+            lowerWeb.includes('instagram.com/explore')
+          ) {
+            website = null;
+          }
+        }
+
+        return { phone, website };
+      });
+
+      return {
+        name,
+        phone: panelDetails.phone || listDetails.phone,
+        website: panelDetails.website || listDetails.website,
+        distance,
+        email: null
+      };
     } catch (e) {
+      console.warn(`Gagal mengambil detail mendalam untuk ${name}, menggunakan data list view.`);
       return { name, ...listDetails, email: null };
     }
-
-    const currentUrl = page.url();
-    const leadCoords = extractCoordsFromUrl(currentUrl);
-
-    let distance = listDetails.distance;
-    if (baseCoords && leadCoords) {
-      const distKm = calculateDistance(baseCoords, leadCoords);
-      distance = distKm < 1
-        ? `${(distKm * 1000).toFixed(0)} m`
-        : `${distKm.toFixed(1)} km`;
-    }
-
-    const panelDetails = await page.evaluate(() => {
-      // Helper to find by data-item-id patterns
-      const findByItemId = (pattern: string) => {
-        const el = Array.from(document.querySelectorAll('[data-item-id]')).find(el =>
-          (el.getAttribute('data-item-id') || '').includes(pattern)
-        );
-        return el ? (el as HTMLElement).innerText.trim() : null;
-      };
-
-      // 1. Find phone
-      // Try data-item-id first
-      let phone = findByItemId('phone:tel:');
-
-      // Try tel: links
-      if (!phone) {
-        const phoneLinks = Array.from(document.querySelectorAll('a[href^="tel:"]'));
-        phone = phoneLinks.length > 0 ? (phoneLinks[0] as HTMLAnchorElement).href.replace('tel:', '').trim() : null;
-      }
-
-      // Try searching for Indonesian phone pattern in all buttons/spans
-      if (!phone) {
-        const phoneBtn = Array.from(document.querySelectorAll('button, a, span')).find(el => {
-          const text = (el as HTMLElement).innerText || '';
-          return /^(\+62|62|0)8[1-9][0-9]{7,11}$/.test(text.replace(/[\s\-]/g, ''));
-        });
-        phone = phoneBtn ? (phoneBtn as HTMLElement).innerText.trim() : null;
-      }
-
-      // 2. Find website
-      // Try data-item-id="authority" (The most reliable way in Google Maps)
-      const webEl = document.querySelector('[data-item-id="authority"]');
-      let website = webEl ? (webEl as HTMLAnchorElement).href : null;
-
-      // Try specific aria-labels/tooltips if authority ID is missing
-      if (!website) {
-        const webBtn = document.querySelector('a[aria-label*="Website"], a[aria-label*="Situs"], a[data-tooltip*="Situs"], a[data-tooltip*="website"]');
-        website = webBtn ? (webBtn as HTMLAnchorElement).href : null;
-      }
-
-      // NO FALLBACK for generic links. If Google doesn't explicitly label it as a website,
-      // it's likely unrelated (like reviewer profiles or social links in descriptions).
-
-      if (phone) phone = phone.replace(/[^\d\s\-\+\(\)]/g, '').trim();
-
-      // Strict website validation
-      if (website) {
-        const lowerWeb = website.toLowerCase();
-        if (
-          lowerWeb.includes('google.com/maps') ||
-          lowerWeb.includes('google.com/search') ||
-          lowerWeb.includes('javascript:') ||
-          lowerWeb.includes('arenacorp.com') || // Specifically exclude portal domains
-          lowerWeb.includes('facebook.com/pages') || // Sometimes generic FB pages
-          lowerWeb.includes('instagram.com/explore')
-        ) {
-          website = null;
-        }
-      }
-
-      return { phone, website };
-    });
-
-    return {
-      name,
-      phone: panelDetails.phone || listDetails.phone,
-      website: panelDetails.website || listDetails.website,
-      distance,
-      email: null
-    };
   } catch (error) {
     console.error(`Error processing item:`, error);
     return null;
@@ -374,15 +367,25 @@ export async function scrapeGoogleMaps({
   const searchUrl = `https://www.google.com/maps/search/${encodeURIComponent(searchQuery)}`;
 
   try {
-    await page.goto(searchUrl);
-    await page.waitForSelector('div[role="article"]', { timeout: 15000 });
+    await page.goto(searchUrl, { waitUntil: 'networkidle' });
+    await page.waitForSelector('div[role="article"]', { timeout: 20000 });
 
-    // Try to get base coordinates from the initial search URL
-    // We wait a bit to ensure the map center is updated
-    await page.waitForTimeout(2000);
-    const baseCoords = extractCoordsFromUrl(page.url());
+    // Enhanced base coordinate detection
+    // Wait for URL to update with coordinates (contains @lat,lng)
+    let baseCoords: Coordinates | null = null;
+    for (let i = 0; i < 5; i++) {
+      baseCoords = extractCoordsFromUrl(page.url());
+      if (baseCoords) break;
+      console.log('Menunggu koordinat peta muncul di URL...');
+      await page.waitForTimeout(1000);
+    }
+
     if (baseCoords) {
       console.log(`Titik acuan lokasi ditemukan: ${baseCoords.lat}, ${baseCoords.lng}`);
+    } else {
+      // Fallback: Use the forced geolocation if URL doesn't provide coords
+      baseCoords = { lat: -6.1751, lng: 106.8272 };
+      console.log('Menggunakan koordinat default (Jakarta) sebagai acuan jarak.');
     }
 
     await scrollResults(page, limit);
