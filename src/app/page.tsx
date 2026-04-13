@@ -1,7 +1,6 @@
 'use client'
 
 import { useTransition, useState } from 'react'
-import { runScraper } from './actions'
 import { Navigation } from '@/components/dashboard/Navigation'
 import { Header } from '@/components/dashboard/Header'
 import { ScraperForm } from '@/components/dashboard/ScraperForm'
@@ -26,27 +25,90 @@ export default function ScraperDashboard() {
   const [isPending, startTransition] = useTransition()
   const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false)
 
+  const [isProcessing, setIsProcessing] = useState(false)
+  const [partialWarning, setPartialWarning] = useState<string | null>(null)
+
   const handleScrape = async (e: React.FormEvent) => {
     e.preventDefault()
     setError(null)
+    setPartialWarning(null)
+    setLeads([]) // Clear existing leads for new search
+    setIsProcessing(true)
 
-    startTransition(async () => {
-      // Convert empty strings to undefined to use server-side defaults
-      const limit = form.limit === '' ? undefined : Number(form.limit)
-      const radius = form.radius === '' ? undefined : Number(form.radius)
+    const limitValue = parseInt(String(form.limit));
+    const limitRequested = isNaN(limitValue) ? 10 : limitValue;
 
-      const result = await runScraper(form.query, form.location, limit, radius)
-      if (result.success && result.data) {
-        setLeads(result.data as Lead[])
-      } else {
-        setError(result.error || 'Terjadi kesalahan saat scraping.')
+    const radiusValue = parseInt(String(form.radius));
+    const radius = isNaN(radiusValue) ? undefined : radiusValue;
+
+    try {
+      const response = await fetch('/api/scrape', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query: form.query,
+          location: form.location,
+          lat: form.lat,
+          lng: form.lng,
+          limit: limitRequested,
+          radius
+        }),
+      })
+
+      if (!response.ok) {
+        throw new Error('Gagal menghubungi server scraping.')
       }
-    })
+
+      const reader = response.body?.getReader()
+      if (!reader) throw new Error('ReadableStream tidak didukung di browser ini.')
+
+      const textDecoder = new TextDecoder()
+      let buffer = ''
+      let finalCount = 0
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        buffer += textDecoder.decode(value, { stream: true })
+        const lines = buffer.split('\n')
+        buffer = lines.pop() || ''
+
+        for (const line of lines) {
+          if (!line.trim()) continue
+          try {
+            const payload = JSON.parse(line)
+            if (payload.type === 'lead') {
+              setLeads(prev => [...prev, payload.data])
+              finalCount++
+            } else if (payload.type === 'error') {
+              setError(payload.message)
+            } else if (payload.type === 'done') {
+              // Handle done if needed
+            }
+          } catch (e) {
+            console.error('Error parsing stream chunk:', e)
+          }
+        }
+      }
+
+      // Check for partial results after stream ends
+      if (finalCount > 0 && finalCount < limitRequested) {
+        setPartialWarning(`Hanya ditemukan ${finalCount} dari ${limitRequested} data yang diminta. Hal ini mungkin karena radius pencarian atau keterbatasan hasil di lokasi tersebut.`);
+      }
+
+    } catch (err: any) {
+      setError(err.message || 'Terjadi kesalahan saat scraping.')
+    } finally {
+      setIsProcessing(false)
+    }
   }
 
   const handleReset = () => {
     resetDashboard()
     setError(null)
+    setPartialWarning(null)
+    setIsProcessing(false)
   }
 
   return (
@@ -62,11 +124,26 @@ export default function ScraperDashboard() {
               form={form}
               setForm={setForm}
               handleScrape={handleScrape}
-              isPending={isPending}
+              isPending={isProcessing}
               error={error}
               onReset={handleReset}
             />
           </div>
+
+          {partialWarning && (
+            <div className="max-w-4xl mx-auto w-full animate-in fade-in zoom-in duration-300">
+              <div className="bg-amber-50 border border-amber-100 rounded-2xl p-4 flex items-center gap-3 text-amber-800 text-sm shadow-sm">
+                <div className="w-8 h-8 bg-amber-100 rounded-xl flex items-center justify-center shrink-0">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-4 h-4 text-amber-600">
+                    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                    <line x1="12" y1="9" x2="12" y2="13" />
+                    <line x1="12" y1="17" x2="12.01" y2="17" />
+                  </svg>
+                </div>
+                <p className="font-medium">{partialWarning}</p>
+              </div>
+            </div>
+          )}
 
           <div className="w-full animate-in fade-in slide-in-from-bottom-8 duration-700 delay-150">
             <LeadsGrid
@@ -76,6 +153,7 @@ export default function ScraperDashboard() {
               setViewingLead={setViewingLead}
               onReset={handleReset}
               onOpenTemplates={() => setIsTemplateModalOpen(true)}
+              isProcessing={isProcessing}
             />
           </div>
         </div>

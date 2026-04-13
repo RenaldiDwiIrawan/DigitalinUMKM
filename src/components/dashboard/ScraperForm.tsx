@@ -1,9 +1,19 @@
-'use client'
-
+import { useState, useEffect, useRef } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Search, MapPin, Radius, ListOrdered, AlertTriangle, ArrowRight, Loader2, Sparkles } from "lucide-react"
+
+interface PhotonFeature {
+  properties: {
+    name: string;
+    display_address?: string;
+    district?: string;
+    city?: string;
+    state?: string;
+    country?: string;
+  };
+}
 
 interface ScraperFormProps {
   form: {
@@ -20,6 +30,53 @@ interface ScraperFormProps {
 }
 
 export function ScraperForm({ form, setForm, handleScrape, onReset, isPending, error }: ScraperFormProps) {
+  const [suggestions, setSuggestions] = useState<PhotonFeature[]>([]);
+  const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const suggestionRef = useRef<HTMLDivElement>(null);
+
+  // Debounced location search
+  useEffect(() => {
+    const fetchSuggestions = async () => {
+      if (form.location.length < 3) {
+        setSuggestions([]);
+        return;
+      }
+
+      setIsLoadingSuggestions(true);
+      try {
+        const response = await fetch(
+          `/api/location-suggest?q=${encodeURIComponent(form.location)}`
+        );
+        if (!response.ok) {
+          throw new Error(`API error: ${response.status}`);
+        }
+        const data = await response.json();
+        setSuggestions(data.features || []);
+      } catch (error) {
+        console.error("Autocomplete error:", error);
+        setSuggestions([]);
+      } finally {
+        setIsLoadingSuggestions(false);
+      }
+    };
+
+    const timer = setTimeout(fetchSuggestions, 400);
+    return () => clearTimeout(timer);
+  }, [form.location]);
+
+  // Click outside to close suggestions
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (suggestionRef.current && !suggestionRef.current.contains(event.target as Node)) {
+        setShowSuggestions(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
   return (
     <Card className="bg-white overflow-hidden border border-gray-100 shadow-sm mb-8 rounded-3xl transition-all hover:shadow-md">
       <CardHeader className="bg-gray-50/50 pb-4 border-b border-gray-100 px-8 py-6">
@@ -48,7 +105,7 @@ export function ScraperForm({ form, setForm, handleScrape, onReset, isPending, e
             </div>
           </div>
 
-          <div className="space-y-2">
+          <div className="space-y-2 relative" ref={suggestionRef}>
             <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-2 px-1">
               Lokasi Target
             </label>
@@ -57,11 +114,50 @@ export function ScraperForm({ form, setForm, handleScrape, onReset, isPending, e
               <Input
                 type="text"
                 value={form.location}
-                onChange={(e) => setForm({ ...form, location: e.target.value })}
+                onFocus={() => setShowSuggestions(true)}
+                onChange={(e) => {
+                  setForm({ ...form, location: e.target.value });
+                  setShowSuggestions(true);
+                }}
                 placeholder="Contoh: Bekasi, Jakarta Selatan"
                 required
                 className="h-12 pl-11 bg-white border-gray-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/5 rounded-xl font-semibold text-gray-900 placeholder:text-gray-400 transition-all"
               />
+
+              {/* Suggestions Dropdown */}
+              {showSuggestions && (suggestions.length > 0 || isLoadingSuggestions) && (
+                <div className="absolute z-50 w-full mt-2 bg-white border border-gray-100 rounded-2xl shadow-xl max-h-60 overflow-auto py-2 animate-in fade-in zoom-in duration-200">
+                  {isLoadingSuggestions ? (
+                    <div className="px-4 py-3 text-xs text-gray-400 flex items-center gap-2">
+                      <Loader2 className="w-3 h-3 animate-spin" /> Mencari lokasi...
+                    </div>
+                  ) : (
+                    suggestions.map((feature, index) => {
+                      const { name, display_address, district, city, state } = feature.properties;
+                      const subAddress = display_address || [district, city, state].filter(Boolean).join(', ');
+                      const fullLocation = display_address ? `${name}, ${display_address}` : [name, district, city, state].filter(Boolean).join(', ');
+
+                      return (
+                        <button
+                          key={index}
+                          type="button"
+                          className="w-full text-left px-4 py-3 hover:bg-blue-50 transition-colors flex flex-col gap-0.5 group/item"
+                          onClick={() => {
+                            setForm({ ...form, location: fullLocation });
+                            setSuggestions([]);
+                            setShowSuggestions(false);
+                          }}
+                        >
+                          <span className="text-sm font-bold text-gray-900 group-hover/item:text-blue-700 transition-colors">{name}</span>
+                          <span className="text-[10px] text-gray-500 line-clamp-1">
+                            {subAddress}
+                          </span>
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
+              )}
             </div>
           </div>
 

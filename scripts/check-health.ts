@@ -1,22 +1,4 @@
-import { chromium as playwright } from 'playwright-core';
-
-async function getBrowser() {
-  if (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME) {
-    const chromium = (await import('@sparticuz/chromium-min')).default;
-    return await playwright.launch({
-      args: chromium.args,
-      executablePath: await chromium.executablePath(),
-      headless: true,
-    });
-  }
-
-  try {
-    const { chromium } = await import('playwright');
-    return await chromium.launch({ headless: true });
-  } catch {
-    return await playwright.launch({ headless: true });
-  }
-}
+import { getBrowser } from '../src/lib/browser';
 
 async function testLocalhost() {
   const browser = await getBrowser();

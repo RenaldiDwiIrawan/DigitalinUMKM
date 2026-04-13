@@ -12,16 +12,20 @@ export interface Lead {
 
 interface DashboardState {
   leads: Lead[]
-  setLeads: (leads: Lead[]) => void
+  setLeads: React.Dispatch<React.SetStateAction<Lead[]>>
   form: {
     query: string
     location: string
+    lat?: number
+    lng?: number
     limit: number | string
     radius: number | string
   }
   setForm: React.Dispatch<React.SetStateAction<{
     query: string;
     location: string;
+    lat?: number;
+    lng?: number;
     limit: string | number;
     radius: string | number;
   }>>
@@ -38,6 +42,8 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   const [form, setForm] = useState<{
     query: string;
     location: string;
+    lat?: number;
+    lng?: number;
     limit: string | number;
     radius: string | number;
   }>({
@@ -89,6 +95,8 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     setForm({
       query: '',
       location: '',
+      lat: undefined,
+      lng: undefined,
       limit: '',
       radius: ''
     })

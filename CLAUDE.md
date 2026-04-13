@@ -6,7 +6,7 @@
 - `src/app/`: Next.js App Router pages and server actions.
 - `src/components/dashboard/`: UI components for the lead generation dashboard.
 - `src/components/templates/`: Website templates for business categories (Cafe, Petshop).
-- `src/lib/`: Core logic and utilities (e.g., Google Maps scraper).
+- `src/lib/`: Core logic and utilities (e.g., Google Maps scraper, browser manager).
 - `tools/scraper/`: Independent scraper tool components and results.
 - `public/docs/templates/`: Static documentation (e.g., PROMPT.md) linked in the UI.
 - `docs/`: General project documentation.

@@ -1,62 +1,5 @@
-import { chromium as playwright, BrowserContext, Page, Browser } from 'playwright-core';
-
-// We'll dynamically import playwright and @sparticuz/chromium based on environment
-async function getBrowser(): Promise<Browser> {
-  // Option 1: Remote Browser (Recommended for Production)
-  if (process.env.BROWSER_WS_ENDPOINT) {
-    console.log('Connecting to remote browser...');
-    return await playwright.connectOverCDP(process.env.BROWSER_WS_ENDPOINT);
-  }
-
-  // Option 2: Vercel / Serverless environment
-  if (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME) {
-    console.log('Detected serverless environment (Vercel/Lambda).');
-    try {
-      const chromium = (await import('@sparticuz/chromium-min')).default;
-
-      // Try to find executable path.
-      // We'll try to use a known stable version if the default fails.
-      let executablePath: string;
-      try {
-        executablePath = await chromium.executablePath();
-      } catch {
-        console.log('Default executable path failed, trying with remote pack...');
-        executablePath = await chromium.executablePath(
-          'https://github.com/sparticuz/chromium/releases/download/v123.0.1/chromium-v123.0.1-pack.tar'
-        );
-      }
-
-      console.log('Launching playwright-core with executablePath:', executablePath);
-      return await playwright.launch({
-        args: chromium.args,
-        executablePath,
-        headless: true,
-      });
-    } catch (error: any) {
-      console.error('CRITICAL: Failed to launch serverless chromium:', error);
-
-      // Provide fallback to connection if endpoint exists
-      if (process.env.BROWSER_WS_ENDPOINT) {
-        return await playwright.connectOverCDP(process.env.BROWSER_WS_ENDPOINT);
-      }
-
-      // Throw a more descriptive error so the user can see what's wrong
-      throw new Error(`Browser launch failed: ${error.message || 'Unknown error'}. Check Vercel logs for stack trace.`);
-    }
-  }
-
-  // Option 3: Local environment
-  console.log('Launching browser in local environment...');
-  try {
-    // Attempt to use local playwright installation
-    // We try to import the full 'playwright' package if available locally for convenience
-    const { chromium } = await import('playwright');
-    return await chromium.launch({ headless: true });
-  } catch (error) {
-    // Fallback to playwright-core if 'playwright' is not installed
-    return await playwright.launch({ headless: true });
-  }
-}
+import { chromium as playwright, BrowserContext, Page, Browser, Locator } from 'playwright-core';
+import { getBrowser } from './browser';
 
 export interface ScrapeResult {
   name: string;
@@ -69,8 +12,11 @@ export interface ScrapeResult {
 export interface ScrapeOptions {
   query: string;
   location: string;
+  lat?: number;
+  lng?: number;
   limit?: number;
   radius?: number;
+  onLeadFound?: (lead: ScrapeResult) => void;
 }
 
 interface Coordinates {
@@ -80,15 +26,28 @@ interface Coordinates {
 
 /**
  * Extracts coordinates from a Google Maps URL.
+ * Handles both @lat,lng and !3dlat!4dlng formats.
  */
 function extractCoordsFromUrl(url: string): Coordinates | null {
-  const match = url.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/);
-  if (match) {
+  // Format 1: @lat,lng
+  const match1 = url.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/);
+  if (match1) {
     return {
-      lat: parseFloat(match[1]),
-      lng: parseFloat(match[2])
+      lat: parseFloat(match1[1]),
+      lng: parseFloat(match1[2])
     };
   }
+
+  // Format 2: !3dlat!4dlng (often used in business/place URLs)
+  const latMatch = url.match(/!3d(-?\d+\.\d+)/);
+  const lngMatch = url.match(/!4d(-?\d+\.\d+)/);
+  if (latMatch && lngMatch) {
+    return {
+      lat: parseFloat(latMatch[1]),
+      lng: parseFloat(lngMatch[2])
+    };
+  }
+
   return null;
 }
 
@@ -220,8 +179,9 @@ async function scrollResults(page: Page, limit: number): Promise<void> {
 /**
  * Extracts basic details for a single lead from the Google Maps interface.
  */
-async function extractLeadDetails(page: Page, item: any, baseCoords: Coordinates | null): Promise<ScrapeResult | null> {
+async function extractLeadDetails(page: Page, item: Locator, baseCoords: Coordinates | null): Promise<ScrapeResult | null> {
   try {
+    // Playwright Locators handle auto-retrying for basic attributes
     const name = (await item.getAttribute('aria-label')) || 'Unknown';
 
     // Get fallback details from list view before clicking
@@ -250,20 +210,33 @@ async function extractLeadDetails(page: Page, item: any, baseCoords: Coordinates
         website,
         distance: distanceMatch ? distanceMatch[0] : null
       };
+    }).catch(err => {
+      console.warn(`Evaluation failed for ${name}:`, err.message);
+      return { phone: null, website: null, distance: null };
     });
 
+    // Ensure element is visible before clicking
+    await item.scrollIntoViewIfNeeded({ timeout: 2000 }).catch(() => {});
+
     // Click and wait for detail panel
-    await item.click();
+    // Using force: true to avoid "intercepted" errors, though Locator.click usually handles this
+    await item.click({ timeout: 5000 }).catch(err => {
+      console.warn(`Click failed for ${name}: ${err.message}. Re-trying with dispatch...`);
+      return item.dispatchEvent('click');
+    });
 
     try {
-      // Wait for the URL to change and contain business-specific coordinates
+      // Wait for the detail panel to appear
       await page.waitForSelector('.DUwDvf', { timeout: 8000 });
+
+      // Small delay for panel content to settle
+      await page.waitForTimeout(500);
 
       let leadCoords: Coordinates | null = null;
       for (let i = 0; i < 3; i++) {
-        await page.waitForTimeout(800);
         leadCoords = extractCoordsFromUrl(page.url());
         if (leadCoords) break;
+        await page.waitForTimeout(800);
       }
 
       let distance = listDetails.distance;
@@ -337,8 +310,12 @@ async function extractLeadDetails(page: Page, item: any, baseCoords: Coordinates
       console.warn(`Gagal mengambil detail mendalam untuk ${name}, menggunakan data list view.`);
       return { name, ...listDetails, email: null };
     }
-  } catch (error) {
-    console.error(`Error processing item:`, error);
+  } catch (error: any) {
+    if (error.message?.includes('detached')) {
+      console.error(`Item detached from DOM for item, skipping...`);
+    } else {
+      console.error(`Error processing item:`, error.message);
+    }
     return null;
   }
 }
@@ -346,25 +323,36 @@ async function extractLeadDetails(page: Page, item: any, baseCoords: Coordinates
 /**
  * Main function to scrape Google Maps leads.
  */
-export async function scrapeGoogleMaps({
-  query,
-  location,
-  limit = 10,
-  radius
-}: ScrapeOptions): Promise<ScrapeResult[]> {
+export async function scrapeGoogleMaps(options: ScrapeOptions): Promise<ScrapeResult[]> {
+  const {
+    query,
+    location,
+    lat,
+    lng,
+    limit = 10,
+    radius,
+    onLeadFound
+  } = options;
+
   const browser = await getBrowser();
   const context = await browser.newContext({
     userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36',
     locale: 'id-ID',
     timezoneId: 'Asia/Jakarta',
-    geolocation: { longitude: 106.8272, latitude: -6.1751 }, // Force Jakarta location
+    geolocation: (lat !== undefined && lng !== undefined)
+      ? { latitude: lat, longitude: lng }
+      : { longitude: 106.8272, latitude: -6.1751 },
     permissions: ['geolocation'],
     viewport: { width: 1280, height: 720 }
   });
   const page = await context.newPage();
 
   const searchQuery = radius ? `${query} near ${location} radius:${radius}km` : `${query} ${location}`;
-  const searchUrl = `https://www.google.com/maps/search/${encodeURIComponent(searchQuery)}`;
+  let searchUrl = `https://www.google.com/maps/search/${encodeURIComponent(searchQuery)}`;
+
+  if (lat && lng) {
+    searchUrl = `https://www.google.com/maps/search/${encodeURIComponent(searchQuery)}/@${lat},${lng},15z`;
+  }
 
   try {
     await page.goto(searchUrl, { waitUntil: 'load', timeout: 30000 });
@@ -376,56 +364,104 @@ export async function scrapeGoogleMaps({
     }
 
     // Enhanced base coordinate detection
-    // Wait for URL to update with coordinates (contains @lat,lng)
     let baseCoords: Coordinates | null = null;
-    for (let i = 0; i < 5; i++) {
+    console.log(`Mencari titik acuan lokasi untuk: ${location}...`);
+
+    for (let i = 0; i < 8; i++) { // Increased wait for map to center
       baseCoords = extractCoordsFromUrl(page.url());
-      if (baseCoords) break;
-      console.log('Menunggu koordinat peta muncul di URL...');
+      // Check if coordinates are found and they are not the default Jakarta center if we are searching elsewhere
+      if (baseCoords && (baseCoords.lat !== -6.1751 || baseCoords.lng !== 106.8272)) {
+        console.log(`Titik acuan lokasi ditemukan: ${baseCoords.lat}, ${baseCoords.lng}`);
+        break;
+      }
       await page.waitForTimeout(1000);
     }
 
-    if (baseCoords) {
-      console.log(`Titik acuan lokasi ditemukan: ${baseCoords.lat}, ${baseCoords.lng}`);
-    } else {
-      // Fallback: Use the forced geolocation if URL doesn't provide coords
+    if (!baseCoords) {
       baseCoords = { lat: -6.1751, lng: 106.8272 };
-      console.log('Menggunakan koordinat default (Jakarta) sebagai acuan jarak.');
+      console.log('Peringatan: Tidak dapat mendeteksi koordinat lokasi spesifik dari URL. Menggunakan koordinat pusat Jakarta sebagai fallback.');
     }
 
+    // Initial scroll
     await scrollResults(page, limit);
-
-    const items = await page.$$('div[role="article"]');
-    console.log(`Ditemukan ${items.length} elemen hasil pencarian.`);
-
-    if (items.length === 0) {
-      throw new Error(`Tidak ditemukan hasil untuk "${query}" di "${location}".`);
-    }
 
     const leads: ScrapeResult[] = [];
     const seenNames = new Set<string>();
+    const itemsLocator = page.locator('div[role="article"]');
 
-    for (const [index, item] of items.entries()) {
-      if (leads.length >= limit) break;
+    let processedIndex = 0;
+    let consecutiveFailures = 0;
+    const maxItemsToProcess = radius ? 150 : 100; // Process more items if we are filtering by radius
 
-      console.log(`Memproses item ke-${index + 1}/${items.length}...`);
+    console.log(`Mulai memproses hasil pencarian (Radius: ${radius ? radius + 'km' : 'Tidak dibatasi'})...`);
+
+    while (leads.length < limit && processedIndex < maxItemsToProcess) {
+      let currentCount = await itemsLocator.count();
+
+      if (processedIndex >= currentCount) {
+        console.log(`Mencapai akhir hasil yang dimuat (${currentCount}), mencoba scroll lebih banyak...`);
+        await scrollResults(page, limit);
+        const newCount = await itemsLocator.count();
+        if (newCount <= currentCount) break;
+        currentCount = newCount;
+      }
+
+      const item = itemsLocator.nth(processedIndex);
       const lead = await extractLeadDetails(page, item, baseCoords);
-      if (lead && !seenNames.has(lead.name)) {
-        seenNames.add(lead.name);
-        leads.push(lead);
-        console.log(`Berhasil mengambil: ${lead.name}`);
+
+      if (lead) {
+        consecutiveFailures = 0;
+
+        // --- Radius Filtering Logic ---
+        if (radius && lead.distance) {
+          // Parse numeric distance from string (e.g., "1.5 km" or "800 m")
+          const distMatch = lead.distance.match(/(\d+([.,]\d+)?)\s*(km|m)/i);
+          if (distMatch) {
+            let distVal = parseFloat(distMatch[1].replace(',', '.'));
+            const unit = distMatch[3].toLowerCase();
+            if (unit === 'm') distVal = distVal / 1000;
+
+            if (distVal > radius) {
+              console.log(`Melompati ${lead.name} karena jaraknya ${distVal.toFixed(1)}km (melebihi radius ${radius}km)`);
+              processedIndex++;
+              continue;
+            }
+          }
+        }
+        // ------------------------------
+
+        if (!seenNames.has(lead.name)) {
+          seenNames.add(lead.name);
+
+          // Enrich with email immediately if website exists
+          if (lead.website) {
+            console.log(`Mencari email untuk ${lead.name} di ${lead.website}...`);
+            lead.email = await findEmailFromWebsite(context, lead.website);
+          }
+
+          leads.push(lead);
+          console.log(`Berhasil mengambil (${leads.length}/${limit}): ${lead.name} (${lead.distance || 'jarak N/A'})`);
+
+          // Call streaming callback
+          if (onLeadFound) {
+            onLeadFound(lead);
+          }
+        }
+      } else {
+        consecutiveFailures++;
+        if (consecutiveFailures >= 5) break;
+      }
+
+      processedIndex++;
+
+      // Early exit if no results found within radius after checking initial candidates
+      if (radius && leads.length === 0 && processedIndex >= 15) {
+        throw new Error(`Tidak ditemukan "${query}" dalam radius ${radius}km di "${location}". Coba perbesar radius atau gunakan kata kunci lain.`);
       }
     }
 
-    // Phase 2: Enrich with emails in parallel
-    const concurrencyLimit = 3;
-    for (let i = 0; i < leads.length; i += concurrencyLimit) {
-      const batch = leads.slice(i, i + concurrencyLimit);
-      await Promise.all(batch.map(async (lead) => {
-        if (lead.website) {
-          lead.email = await findEmailFromWebsite(context, lead.website);
-        }
-      }));
+    if (leads.length === 0) {
+      throw new Error(`Tidak ditemukan hasil valid untuk "${query}" di "${location}".`);
     }
 
     await browser.close();

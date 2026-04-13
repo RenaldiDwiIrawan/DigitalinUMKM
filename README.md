@@ -8,6 +8,7 @@
 ## ✨ Key Features
 
 - **🎯 Precision Lead Generation**: Real-time Google Maps scraping with automated data enrichment (Phone, Email, Website).
+- **📍 Smart Location Autocomplete**: Custom location suggestion system powered by Google Maps (no API key required), providing high accuracy for target locations.
 - **📋 Elite Leads Management**: Minimalist, high-performance dashboard with persistent data storage (`localStorage`).
 - **📥 Pro Data Portability**: Export high-value leads directly to CSV for CRM integration.
 - **🎨 Premium Website Templates**: Instant, high-end "Elite Edition" templates for Cafes and Petshops, designed with minimalist and elegant aesthetics.
@@ -67,6 +68,15 @@
    npm run dev
    ```
    Open [http://localhost:8088](http://localhost:8088) to start your session.
+
+---
+
+## 🌐 Deployment
+
+### Vercel
+DigitalinUMKM is optimized for Vercel. For high-reliability scraping in production:
+1. Set the environment variable `BROWSER_WS_ENDPOINT` to a remote browser provider (like Browserless.io) in the Vercel dashboard.
+2. If running locally or on a standard server, ensure Playwright browsers are installed (`npx playwright install chromium`).
 
 ---
 
