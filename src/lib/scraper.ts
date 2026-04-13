@@ -10,18 +10,30 @@ async function getBrowser(): Promise<Browser> {
 
   // Option 2: Vercel / Serverless environment
   if (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME) {
-    console.log('Launching browser in serverless environment...');
+    console.log('Detected serverless environment (Vercel/Lambda).');
     try {
       // Use dynamic imports for serverless-only dependencies
       const chromium = (await import('@sparticuz/chromium-min')).default;
 
+      // Optional: Set a remote URL for the chromium pack if it's too large for the bundle
+      // This is often needed for chromium-min
+      const executablePath = await chromium.executablePath(
+        'https://github.com/sparticuz/chromium/releases/download/v147.0.0/chromium-v147.0.0-pack.tar'
+      );
+
+      console.log('Launching playwright-core with sparticuz/chromium...');
       return await playwright.launch({
         args: chromium.args,
-        executablePath: await chromium.executablePath(),
+        executablePath,
         headless: true,
       });
     } catch (error) {
-      console.error('Failed to launch serverless chromium, falling back to local:', error);
+      console.error('CRITICAL: Failed to launch serverless chromium:', error);
+      // Fallback to connection if endpoint exists, otherwise this will likely fail
+      if (process.env.BROWSER_WS_ENDPOINT) {
+        return await playwright.connectOverCDP(process.env.BROWSER_WS_ENDPOINT);
+      }
+      throw new Error('Could not launch browser in serverless environment. Please check Vercel logs.');
     }
   }
 
