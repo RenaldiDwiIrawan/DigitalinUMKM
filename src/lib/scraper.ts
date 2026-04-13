@@ -1,4 +1,42 @@
-import { chromium, BrowserContext, Page } from 'playwright';
+import { chromium as playwright, BrowserContext, Page, Browser } from 'playwright-core';
+
+// We'll dynamically import playwright and @sparticuz/chromium based on environment
+async function getBrowser(): Promise<Browser> {
+  // Option 1: Remote Browser (Recommended for Production)
+  if (process.env.BROWSER_WS_ENDPOINT) {
+    console.log('Connecting to remote browser...');
+    return await playwright.connectOverCDP(process.env.BROWSER_WS_ENDPOINT);
+  }
+
+  // Option 2: Vercel / Serverless environment
+  if (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME) {
+    console.log('Launching browser in serverless environment...');
+    try {
+      // Use dynamic imports for serverless-only dependencies
+      const chromium = (await import('@sparticuz/chromium-min')).default;
+
+      return await playwright.launch({
+        args: chromium.args,
+        executablePath: await chromium.executablePath(),
+        headless: true,
+      });
+    } catch (error) {
+      console.error('Failed to launch serverless chromium, falling back to local:', error);
+    }
+  }
+
+  // Option 3: Local environment
+  console.log('Launching browser in local environment...');
+  try {
+    // Attempt to use local playwright installation
+    // We try to import the full 'playwright' package if available locally for convenience
+    const { chromium } = await import('playwright');
+    return await chromium.launch({ headless: true });
+  } catch (error) {
+    // Fallback to playwright-core if 'playwright' is not installed
+    return await playwright.launch({ headless: true });
+  }
+}
 
 export interface ScrapeResult {
   name: string;
@@ -241,7 +279,7 @@ export async function scrapeGoogleMaps({
   limit = 10,
   radius
 }: ScrapeOptions): Promise<ScrapeResult[]> {
-  const browser = await chromium.launch({ headless: true });
+  const browser = await getBrowser();
   const context = await browser.newContext();
   const page = await context.newPage();
 

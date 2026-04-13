@@ -8,15 +8,22 @@ export async function runScraper(query: string, location: string, limit: number 
   try {
     const results = await scrapeGoogleMaps({ query, location, limit, radius });
 
-    // Handle persistence in the action layer (separation of concerns)
-    const outputDir = path.join(process.cwd(), 'tools/scraper/results');
-    const fileName = `leads_${query.replace(/\s+/g, '_')}_${Date.now()}.json`;
-    const filePath = path.join(outputDir, fileName);
+    // Handle persistence in the action layer
+    // Skip file writing on Vercel as the filesystem is read-only
+    if (!process.env.VERCEL) {
+      try {
+        const outputDir = path.join(process.cwd(), 'tools/scraper/results');
+        const fileName = `leads_${query.replace(/\s+/g, '_')}_${Date.now()}.json`;
+        const filePath = path.join(outputDir, fileName);
 
-    fs.mkdirSync(outputDir, { recursive: true });
-    fs.writeFileSync(filePath, JSON.stringify(results, null, 2));
+        fs.mkdirSync(outputDir, { recursive: true });
+        fs.writeFileSync(filePath, JSON.stringify(results, null, 2));
 
-    console.log(`Successfully saved ${results.length} results to ${filePath}`);
+        console.log(`Successfully saved ${results.length} results to ${filePath}`);
+      } catch (fsError) {
+        console.warn('Failed to save results to file (expected on Vercel):', fsError);
+      }
+    }
 
     return { success: true, data: results };
   } catch (error: any) {
