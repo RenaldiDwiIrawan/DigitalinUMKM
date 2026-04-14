@@ -1,29 +1,36 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getBrowser } from '@/lib/browser';
-import { findEmailFromWebsite } from '@/lib/scraper';
+import { findEmailFromWebsite, scrapeLeadDetailsByName } from '@/lib/scraper';
 
 export const dynamic = 'force-dynamic';
+export const maxDuration = 60; // Enrichment can take longer as it's a single item
 
 export async function POST(req: NextRequest) {
   try {
-    const { url } = await req.json();
+    const { url, name, location, type } = await req.json();
 
-    if (!url) {
-      return NextResponse.json({ error: 'URL is required' }, { status: 400 });
+    // Type 1: Email Enrichment (needs URL)
+    if (type === 'email' || url) {
+      if (!url) return NextResponse.json({ error: 'URL is required for email enrichment' }, { status: 400 });
+
+      const browser = await getBrowser();
+      const context = await browser.newContext({
+        userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36',
+      });
+      const email = await findEmailFromWebsite(context, url);
+      return NextResponse.json({ email });
     }
 
-    const browser = await getBrowser();
-    const context = await browser.newContext({
-      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36',
-    });
+    // Type 2: Website/Details Enrichment (needs Name + Location)
+    if (type === 'details' || (name && location)) {
+      if (!name || !location) {
+        return NextResponse.json({ error: 'Name and location are required' }, { status: 400 });
+      }
+      const details = await scrapeLeadDetailsByName(name, location);
+      return NextResponse.json(details);
+    }
 
-    const email = await findEmailFromWebsite(context, url);
-
-    // We don't close the browser here because getBrowser() returns a shared instance,
-    // but the context should be closed. However, findEmailFromWebsite already handles
-    // closing the specific page it creates.
-
-    return NextResponse.json({ email });
+    return NextResponse.json({ error: 'Invalid request parameters' }, { status: 400 });
   } catch (error: any) {
     console.error('Enrichment error:', error);
     return NextResponse.json({ error: error.message }, { status: 500 });

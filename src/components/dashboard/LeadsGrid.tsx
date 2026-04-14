@@ -24,17 +24,20 @@ interface LeadsGridProps {
   onOpenTemplates: () => void
   onUpdateLead?: (oldLead: Lead, updatedLead: Lead) => void
   isProcessing?: boolean
+  location?: string // Added location for enrichment
 }
 
-export function LeadCard({ lead, selectedLead, setSelectedLead, setViewingLead, onOpenTemplates, onUpdateLead }: {
+export function LeadCard({ lead, selectedLead, setSelectedLead, setViewingLead, onOpenTemplates, onUpdateLead, location }: {
   lead: Lead,
   selectedLead: Lead | null,
   setSelectedLead: (lead: Lead) => void,
   setViewingLead: (lead: Lead) => void,
   onOpenTemplates: () => void,
-  onUpdateLead?: (oldLead: Lead, updatedLead: Lead) => void
+  onUpdateLead?: (oldLead: Lead, updatedLead: Lead) => void,
+  location?: string
 }) {
   const [isEnriching, setIsEnriching] = useState(false);
+  const [isEnrichingWebsite, setIsEnrichingWebsite] = useState(false);
 
   const enrichLead = async (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -45,7 +48,7 @@ export function LeadCard({ lead, selectedLead, setSelectedLead, setViewingLead, 
       const response = await fetch('/api/enrich', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: lead.website }),
+        body: JSON.stringify({ url: lead.website, type: 'email' }),
       });
 
       if (response.ok) {
@@ -58,6 +61,31 @@ export function LeadCard({ lead, selectedLead, setSelectedLead, setViewingLead, 
       console.error('Failed to enrich lead:', err);
     } finally {
       setIsEnriching(false);
+    }
+  };
+
+  const enrichWebsite = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (lead.website || isEnrichingWebsite || !location) return;
+
+    setIsEnrichingWebsite(true);
+    try {
+      const response = await fetch('/api/enrich', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: lead.name, location, type: 'details' }),
+      });
+
+      if (response.ok) {
+        const details = await response.json();
+        if (onUpdateLead) {
+          onUpdateLead(lead, { ...lead, ...details });
+        }
+      }
+    } catch (err) {
+      console.error('Failed to enrich website:', err);
+    } finally {
+      setIsEnrichingWebsite(false);
     }
   };
   return (
@@ -100,9 +128,23 @@ export function LeadCard({ lead, selectedLead, setSelectedLead, setViewingLead, 
               </div>
             )}
             {!lead.website && (
-              <div className="flex items-center gap-2 text-[11px] font-medium text-gray-400 italic opacity-60">
-                <Globe className="w-3 h-3" />
-                <span className="truncate">Website N/A</span>
+              <div className="flex items-center justify-between gap-2 text-[11px] font-medium text-gray-400 italic opacity-60">
+                <div className="flex items-center gap-2 truncate">
+                  <Globe className="w-3 h-3" />
+                  <span className="truncate">Website N/A</span>
+                </div>
+                <button
+                  onClick={enrichWebsite}
+                  disabled={isEnrichingWebsite}
+                  className="shrink-0 text-[9px] font-bold text-blue-600 hover:text-blue-700 disabled:opacity-50 flex items-center gap-1 not-italic opacity-100"
+                >
+                  {isEnrichingWebsite ? (
+                    <Zap className="w-2 h-2 animate-pulse" />
+                  ) : (
+                    <Globe className="w-2 h-2" />
+                  )}
+                  {isEnrichingWebsite ? 'Mencari...' : 'Cari Website'}
+                </button>
               </div>
             )}
             <div className="flex items-center justify-between gap-2 text-[11px] font-medium text-gray-500">
@@ -152,7 +194,7 @@ export function LeadCard({ lead, selectedLead, setSelectedLead, setViewingLead, 
   )
 }
 
-export function LeadsGrid({ leads, selectedLead, setSelectedLead, setViewingLead, onReset, onOpenTemplates, isProcessing }: LeadsGridProps) {
+export function LeadsGrid({ leads, selectedLead, setSelectedLead, setViewingLead, onReset, onOpenTemplates, isProcessing, onUpdateLead, location }: LeadsGridProps) {
   return (
     <div className="lg:col-span-8 xl:col-span-9">
       <div className="bg-white p-8 md:p-10 rounded-3xl shadow-sm border border-gray-100 min-h-[600px]">
@@ -239,6 +281,8 @@ export function LeadsGrid({ leads, selectedLead, setSelectedLead, setViewingLead
                   setSelectedLead={setSelectedLead}
                   setViewingLead={setViewingLead}
                   onOpenTemplates={onOpenTemplates}
+                  onUpdateLead={onUpdateLead}
+                  location={location}
                 />
               </div>
             ))}

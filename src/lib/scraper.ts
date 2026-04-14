@@ -396,6 +396,8 @@ async function extractAllLeadsFromView(page: Page): Promise<ScrapeResult[]> {
 
 /**
  * Main function to scrape Google Maps leads.
+ * OPTIMIZED: Now only extracts data from the list view to stay under Vercel's 10s limit.
+ * Expensive deep scraping (clicking) is now moved to a manual process.
  */
 export async function scrapeGoogleMaps(options: ScrapeOptions): Promise<ScrapeResult[]> {
   const {
@@ -439,51 +441,26 @@ export async function scrapeGoogleMaps(options: ScrapeOptions): Promise<ScrapeRe
       await page.waitForSelector('div[role="article"]', { timeout: 15000 });
     }
 
-    // Enhanced base coordinate detection
-    let baseCoords: Coordinates | null = null;
-    console.log(`Mencari titik acuan lokasi untuk: ${location}...`);
-
-    for (let i = 0; i < 8; i++) { // Increased wait for map to center
-      baseCoords = extractCoordsFromUrl(page.url());
-      // Check if coordinates are found and they are not the default Jakarta center if we are searching elsewhere
-      if (baseCoords && (baseCoords.lat !== -6.1751 || baseCoords.lng !== 106.8272)) {
-        console.log(`Titik acuan lokasi ditemukan: ${baseCoords.lat}, ${baseCoords.lng}`);
-        break;
-      }
-      await page.waitForTimeout(1000);
-    }
-
-    if (!baseCoords) {
-      baseCoords = { lat: -6.1751, lng: 106.8272 };
-      console.log('Peringatan: Tidak dapat mendeteksi koordinat lokasi spesifik dari URL. Menggunakan koordinat pusat Jakarta sebagai fallback.');
-    }
-
-    // Initial scroll - more conservative if we have a radius filter
-    // If offset is provided, we need to scroll significantly more to skip previous items
-    const scrollTarget = offset > 0 ? (offset + limit) : (radius ? Math.min(limit, 20) : limit);
+    // --- NEW: Fast Bulk Extraction Only ---
+    // We scroll once to get enough items, then extract all at once.
+    // This avoids the expensive clicking loop that causes timeouts and duplicated data.
+    const scrollTarget = offset + limit + 5;
     await scrollResults(page, scrollTarget);
 
     const leads: ScrapeResult[] = [];
     const seenNames = new Set<string>();
-    const itemsLocator = page.locator('div[role="article"]');
 
-    let processedIndex = offset;
-    let consecutiveFailures = 0;
-    let consecutiveOutsideRadius = 0;
-    const maxItemsToProcess = (offset || 0) + (radius ? 150 : 100);
+    const allVisibleLeads = await extractAllLeadsFromView(page);
+    console.log(`Berhasil mengekstrak ${allVisibleLeads.length} data dari list view.`);
 
-    console.log(`Mulai memproses hasil pencarian dari index ${offset} (Radius: ${radius ? radius + 'km' : 'Tidak dibatasi'})...`);
+    // Skip items before offset
+    const newLeads = allVisibleLeads.slice(offset);
 
-    // --- NEW: Fast Bulk Extraction ---
-    const allBulkLeads = await extractAllLeadsFromView(page);
-    const bulkLeads = allBulkLeads.slice(offset); // Start from offset
-    console.log(`Berhasil mengekstrak ${bulkLeads.length} data baru dari list view (total visible: ${allBulkLeads.length}).`);
-
-    for (const lead of bulkLeads) {
+    for (const lead of newLeads) {
       if (leads.length >= limit) break;
       if (seenNames.has(lead.name)) continue;
 
-      // Apply radius filtering to bulk results
+      // Apply radius filtering
       if (radius && lead.distance) {
         const distMatch = lead.distance.match(/(\d+([.,]\d+)?)\s*(km|m)/i);
         if (distMatch) {
@@ -493,102 +470,18 @@ export async function scrapeGoogleMaps(options: ScrapeOptions): Promise<ScrapeRe
         }
       }
 
-      // If lead is good enough (has phone or website), add it immediately
-      if (lead.phone || lead.website) {
-        seenNames.add(lead.name);
-        leads.push(lead);
-        if (onLeadFound) onLeadFound(lead);
-        console.log(`[Fast Pass] ${lead.name} (${lead.distance || 'N/A'})`);
-      }
-    }
-    // ---------------------------------
+      seenNames.add(lead.name);
+      leads.push(lead);
 
-    while (leads.length < limit && processedIndex < maxItemsToProcess) {
-      let currentCount = await itemsLocator.count();
-
-      if (processedIndex >= currentCount) {
-        console.log(`Mencapai akhir hasil yang dimuat (${currentCount}), mencoba scroll lebih banyak...`);
-        await scrollResults(page, limit);
-        const newCount = await itemsLocator.count();
-        if (newCount <= currentCount) break;
-        currentCount = newCount;
+      // Call streaming callback
+      if (onLeadFound) {
+        onLeadFound(lead);
       }
 
-      const item = itemsLocator.nth(processedIndex);
-      const name = await item.getAttribute('aria-label').catch(() => null);
-
-      // Skip if we already processed this name in bulk extraction
-      if (name && seenNames.has(name)) {
-        processedIndex++;
-        continue;
-      }
-
-      const lead = await extractLeadDetails(page, item, baseCoords);
-
-      if (lead) {
-        consecutiveFailures = 0;
-
-        // --- Radius Filtering Logic ---
-        if (radius && lead.distance) {
-          // Parse numeric distance from string (e.g., "1.5 km" or "800 m")
-          const distMatch = lead.distance.match(/(\d+([.,]\d+)?)\s*(km|m)/i);
-          if (distMatch) {
-            let distVal = parseFloat(distMatch[1].replace(',', '.'));
-            const unit = distMatch[3].toLowerCase();
-            if (unit === 'm') distVal = distVal / 1000;
-
-            if (distVal > radius) {
-              consecutiveOutsideRadius++;
-              console.log(`Melompati ${lead.name} karena jaraknya ${distVal.toFixed(1)}km (melebihi radius ${radius}km). Total berturut-turut: ${consecutiveOutsideRadius}`);
-
-              // If we find any results in a row outside the radius, stop searching quickly
-              // User requested to only try 1 more time if a result is outside the radius
-              if (consecutiveOutsideRadius >= 2) {
-                console.log(`Berhenti mencari: Sudah ${consecutiveOutsideRadius} data di luar radius berturut-turut.`);
-                break;
-              }
-
-              processedIndex++;
-              continue;
-            } else {
-              // Reset counter if we find a result inside the radius
-              consecutiveOutsideRadius = 0;
-            }
-          }
-        }
-        // ------------------------------
-
-        if (!seenNames.has(lead.name)) {
-          seenNames.add(lead.name);
-
-          // Enrich with email only if requested (this is very slow and often causes Vercel timeouts)
-          if (shouldScrapeEmail && lead.website) {
-            console.log(`Mencari email untuk ${lead.name} di ${lead.website}...`);
-            lead.email = await findEmailFromWebsite(context, lead.website);
-          }
-
-          leads.push(lead);
-          console.log(`Berhasil mengambil (${leads.length}/${limit}): ${lead.name} (${lead.distance || 'jarak N/A'})`);
-
-          // Call streaming callback
-          if (onLeadFound) {
-            onLeadFound(lead);
-          }
-        }
-      } else {
-        consecutiveFailures++;
-        if (consecutiveFailures >= 5) break;
-      }
-
-      processedIndex++;
-
-      // Early exit if no results found within radius after checking initial candidates
-      if (radius && leads.length === 0 && processedIndex >= 15) {
-        throw new Error(`Tidak ditemukan "${query}" dalam radius ${radius}km di "${location}". Coba perbesar radius atau gunakan kata kunci lain.`);
-      }
+      console.log(`[Extracted] ${lead.name} (${lead.phone || 'No Phone'})`);
     }
 
-    if (leads.length === 0) {
+    if (leads.length === 0 && offset === 0) {
       throw new Error(`Tidak ditemukan hasil valid untuk "${query}" di "${location}".`);
     }
 
@@ -599,5 +492,76 @@ export async function scrapeGoogleMaps(options: ScrapeOptions): Promise<ScrapeRe
     console.error('Terjadi kesalahan saat scraping:', error.message);
     await browser.close();
     throw error;
+  }
+}
+
+/**
+ * NEW: Scrapes deep details for a SINGLE lead by clicking its list item.
+ * Used for manual enrichment of website and phone if missing.
+ */
+export async function scrapeLeadDetailsByName(name: string, location: string): Promise<Partial<ScrapeResult>> {
+  const browser = await getBrowser();
+  const page = await browser.newPage();
+
+  try {
+    const searchQuery = `${name} ${location}`;
+    const searchUrl = `https://www.google.com/maps/search/${encodeURIComponent(searchQuery)}`;
+
+    await page.goto(searchUrl, { waitUntil: 'load', timeout: 30000 });
+
+    // Find the item that matches the name
+    await page.waitForSelector('div[role="article"]', { timeout: 10000 });
+    const items = page.locator('div[role="article"]');
+    const count = await items.count();
+
+    let targetItem = null;
+    for (let i = 0; i < Math.min(count, 5); i++) {
+      const ariaLabel = await items.nth(i).getAttribute('aria-label');
+      if (ariaLabel?.toLowerCase().includes(name.toLowerCase()) || name.toLowerCase().includes(ariaLabel?.toLowerCase() || '')) {
+        targetItem = items.nth(i);
+        break;
+      }
+    }
+
+    if (!targetItem) {
+      // If not found in list, maybe it opened directly? Check panel name
+      const panelName = await page.locator('.DUwDvf').first().innerText().catch(() => '');
+      if (!panelName.toLowerCase().includes(name.toLowerCase())) {
+        await browser.close();
+        return {};
+      }
+    } else {
+      await targetItem.click();
+      await page.waitForSelector('.DUwDvf', { timeout: 8000 });
+    }
+
+    // Reuse extraction logic from extractLeadDetails but for the current page
+    // (Simplified here for brevity but following same patterns)
+    const details = await page.evaluate(() => {
+      const findByItemId = (pattern: string) => {
+        const el = Array.from(document.querySelectorAll('[data-item-id]')).find(el =>
+          (el.getAttribute('data-item-id') || '').includes(pattern) &&
+          (el as HTMLElement).offsetParent !== null
+        );
+        return el ? (el as HTMLElement).innerText.trim() : null;
+      };
+
+      let phone = findByItemId('phone:tel:');
+      const webEl = Array.from(document.querySelectorAll('[data-item-id="authority"]'))
+        .find(el => (el as HTMLElement).offsetParent !== null);
+      let website = webEl ? (webEl as HTMLAnchorElement).href : null;
+
+      if (website && website.includes('google.com')) website = null;
+      if (phone) phone = phone.replace(/[^\d\s\-\+\(\)]/g, '').trim();
+
+      return { phone, website };
+    });
+
+    await browser.close();
+    return details;
+  } catch (error) {
+    console.error(`Error scraping details for ${name}:`, error);
+    await browser.close();
+    return {};
   }
 }

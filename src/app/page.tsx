@@ -207,6 +207,7 @@ export default function ScraperDashboard() {
               onOpenTemplates={() => setIsTemplateModalOpen(true)}
               onUpdateLead={handleUpdateLead}
               isProcessing={isProcessing}
+              location={form.location}
             />
           </div>
         </div>
