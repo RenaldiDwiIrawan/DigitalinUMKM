@@ -27,16 +27,19 @@ export default function ScraperDashboard() {
 
   const [isProcessing, setIsProcessing] = useState(false)
   const [partialWarning, setPartialWarning] = useState<string | null>(null)
+  const [canContinue, setCanContinue] = useState(false)
 
-  const handleScrape = async (e: React.FormEvent) => {
-    e.preventDefault()
+  const handleScrape = async (e?: React.FormEvent, isContinuation = false) => {
+    if (e) e.preventDefault()
     setError(null)
     setPartialWarning(null)
-    setLeads([]) // Clear existing leads for new search
+    setCanContinue(false)
+    if (!isContinuation) setLeads([]) // Clear existing leads only for new search
     setIsProcessing(true)
 
     const limitValue = parseInt(String(form.limit));
     const limitRequested = isNaN(limitValue) ? 10 : limitValue;
+    const currentOffset = isContinuation ? leads.length : 0;
 
     const radiusValue = parseInt(String(form.radius));
     const radius = isNaN(radiusValue) ? undefined : radiusValue;
@@ -51,7 +54,8 @@ export default function ScraperDashboard() {
           lat: form.lat,
           lng: form.lng,
           limit: limitRequested,
-          radius
+          radius,
+          offset: currentOffset
         }),
       })
 
@@ -64,7 +68,7 @@ export default function ScraperDashboard() {
 
       const textDecoder = new TextDecoder()
       let buffer = ''
-      let finalCount = 0
+      let newLeadsCount = 0
 
       while (true) {
         const { done, value } = await reader.read()
@@ -80,11 +84,9 @@ export default function ScraperDashboard() {
             const payload = JSON.parse(line)
             if (payload.type === 'lead') {
               setLeads(prev => [...prev, payload.data])
-              finalCount++
+              newLeadsCount++
             } else if (payload.type === 'error') {
               setError(payload.message)
-            } else if (payload.type === 'done') {
-              // Handle done if needed
             }
           } catch (e) {
             console.error('Error parsing stream chunk:', e)
@@ -92,13 +94,20 @@ export default function ScraperDashboard() {
         }
       }
 
+      const totalLeads = currentOffset + newLeadsCount;
+
       // Check for partial results after stream ends
-      if (finalCount > 0 && finalCount < limitRequested) {
-        setPartialWarning(`Hanya ditemukan ${finalCount} dari ${limitRequested} data yang diminta. Hal ini mungkin karena radius pencarian atau keterbatasan hasil di lokasi tersebut.`);
+      if (totalLeads > 0 && totalLeads < limitRequested) {
+        setPartialWarning(`Hanya ditemukan ${totalLeads} dari ${limitRequested} data. Vercel limit 10s mungkin tercapai. Klik "Lanjutkan Cari" untuk mencari sisanya.`);
+        setCanContinue(true);
       }
 
     } catch (err: any) {
       setError(err.message || 'Terjadi kesalahan saat scraping.')
+      // If we already have some leads, allow continuing despite error (likely timeout)
+      if (leads.length > 0 || currentOffset > 0) {
+        setCanContinue(true);
+      }
     } finally {
       setIsProcessing(false)
     }
@@ -139,15 +148,34 @@ export default function ScraperDashboard() {
 
           {partialWarning && (
             <div className="max-w-4xl mx-auto w-full animate-in fade-in zoom-in duration-300">
-              <div className="bg-amber-50 border border-amber-100 rounded-2xl p-4 flex items-center gap-3 text-amber-800 text-sm shadow-sm">
-                <div className="w-8 h-8 bg-amber-100 rounded-xl flex items-center justify-center shrink-0">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-4 h-4 text-amber-600">
-                    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
-                    <line x1="12" y1="9" x2="12" y2="13" />
-                    <line x1="12" y1="17" x2="12.01" y2="17" />
-                  </svg>
+              <div className="bg-amber-50 border border-amber-100 rounded-2xl p-4 flex flex-col md:flex-row items-start md:items-center gap-4 text-amber-800 text-sm shadow-sm">
+                <div className="flex items-center gap-3 flex-1">
+                  <div className="w-8 h-8 bg-amber-100 rounded-xl flex items-center justify-center shrink-0">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="w-4 h-4 text-amber-600">
+                      <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                      <line x1="12" y1="9" x2="12" y2="13" />
+                      <line x1="12" y1="17" x2="12.01" y2="17" />
+                    </svg>
+                  </div>
+                  <p className="font-medium">{partialWarning}</p>
                 </div>
-                <p className="font-medium">{partialWarning}</p>
+
+                {canContinue && (
+                  <button
+                    onClick={() => handleScrape(undefined, true)}
+                    disabled={isProcessing}
+                    className="w-full md:w-auto px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-xl transition-all shadow-sm shadow-amber-200 flex items-center justify-center gap-2 active:scale-95 disabled:opacity-50"
+                  >
+                    {isProcessing ? (
+                      <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    ) : (
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" className="w-3 h-3">
+                        <path d="M5 12h14M12 5l7 7-7 7" />
+                      </svg>
+                    )}
+                    {isProcessing ? 'Mencari Sisanya...' : 'Lanjutkan Cari'}
+                  </button>
+                )}
               </div>
             </div>
           )}

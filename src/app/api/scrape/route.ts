@@ -17,7 +17,7 @@ export const dynamic = 'force-dynamic';
 export const maxDuration = 60; // Applies to Pro tier
 
 export async function POST(req: NextRequest) {
-  const { query, location, lat, lng, limit, radius, shouldScrapeEmail } = await req.json();
+  const { query, location, lat, lng, limit, radius, shouldScrapeEmail, offset } = await req.json();
 
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
@@ -34,6 +34,7 @@ export async function POST(req: NextRequest) {
           lng,
           limit,
           radius,
+          offset: offset || 0,
           shouldScrapeEmail: shouldScrapeEmail || false,
           onLeadFound: (lead) => {
             send({ type: 'lead', data: lead });

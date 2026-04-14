@@ -16,6 +16,7 @@ export interface ScrapeOptions {
   lng?: number;
   limit?: number;
   radius?: number;
+  offset?: number;
   onLeadFound?: (lead: ScrapeResult) => void;
   shouldScrapeEmail?: boolean;
 }
@@ -404,6 +405,7 @@ export async function scrapeGoogleMaps(options: ScrapeOptions): Promise<ScrapeRe
     lng,
     limit = 10,
     radius,
+    offset = 0,
     onLeadFound,
     shouldScrapeEmail = false
   } = options;
@@ -457,22 +459,25 @@ export async function scrapeGoogleMaps(options: ScrapeOptions): Promise<ScrapeRe
     }
 
     // Initial scroll - more conservative if we have a radius filter
-    await scrollResults(page, radius ? Math.min(limit, 20) : limit);
+    // If offset is provided, we need to scroll significantly more to skip previous items
+    const scrollTarget = offset > 0 ? (offset + limit) : (radius ? Math.min(limit, 20) : limit);
+    await scrollResults(page, scrollTarget);
 
     const leads: ScrapeResult[] = [];
     const seenNames = new Set<string>();
     const itemsLocator = page.locator('div[role="article"]');
 
-    let processedIndex = 0;
+    let processedIndex = offset;
     let consecutiveFailures = 0;
     let consecutiveOutsideRadius = 0;
-    const maxItemsToProcess = radius ? 150 : 100; // Process more items if we are filtering by radius
+    const maxItemsToProcess = (offset || 0) + (radius ? 150 : 100);
 
-    console.log(`Mulai memproses hasil pencarian (Radius: ${radius ? radius + 'km' : 'Tidak dibatasi'})...`);
+    console.log(`Mulai memproses hasil pencarian dari index ${offset} (Radius: ${radius ? radius + 'km' : 'Tidak dibatasi'})...`);
 
     // --- NEW: Fast Bulk Extraction ---
-    const bulkLeads = await extractAllLeadsFromView(page);
-    console.log(`Berhasil mengekstrak ${bulkLeads.length} data awal dari list view.`);
+    const allBulkLeads = await extractAllLeadsFromView(page);
+    const bulkLeads = allBulkLeads.slice(offset); // Start from offset
+    console.log(`Berhasil mengekstrak ${bulkLeads.length} data baru dari list view (total visible: ${allBulkLeads.length}).`);
 
     for (const lead of bulkLeads) {
       if (leads.length >= limit) break;
