@@ -354,47 +354,6 @@ async function extractLeadDetails(page: Page, item: Locator, baseCoords: Coordin
 }
 
 /**
- * Extracts basic details for ALL visible leads in the results list without clicking.
- * This is much faster and helps avoid Vercel timeouts.
- */
-async function extractAllLeadsFromView(page: Page): Promise<ScrapeResult[]> {
-  return await page.evaluate(() => {
-    const items = Array.from(document.querySelectorAll('div[role="article"]'));
-    return items.map(el => {
-      const name = el.getAttribute('aria-label') || 'Unknown';
-      const text = (el as HTMLElement).innerText;
-
-      // Improved Indonesian phone regex
-      const phoneMatch = text.match(/(?:\+62|62|0)8[1-9][0-9]{7,11}/) ||
-                        text.match(/(\+62|08)\d{2,4}[-\s]?\d{3,4}[-\s]?\d{3,4}/);
-
-      const distanceMatch = text.match(/\d+([.,]\d+)?\s*(km|m)\b/i);
-
-      // Extract website from the globe icon link if present
-      const webBtn = el.querySelector('a[aria-label*="Website"], a[aria-label*="Situs"], a[data-value="Website"]');
-      let website = webBtn ? (webBtn as HTMLAnchorElement).href : null;
-
-      if (website && (
-        website.includes('google.com/maps') ||
-        website.includes('google.com/search') ||
-        website.includes('javascript:') ||
-        website.includes('arenacorp.com')
-      )) {
-        website = null;
-      }
-
-      return {
-        name,
-        phone: phoneMatch ? phoneMatch[0] : null,
-        website,
-        distance: distanceMatch ? distanceMatch[0] : null,
-        email: null
-      };
-    });
-  });
-}
-
-/**
  * Main function to scrape Google Maps leads.
  * OPTIMIZED: Now only extracts data from the list view to stay under Vercel's 10s limit.
  * Expensive deep scraping (clicking) is now moved to a manual process.
@@ -441,16 +400,88 @@ export async function scrapeGoogleMaps(options: ScrapeOptions): Promise<ScrapeRe
       await page.waitForSelector('div[role="article"]', { timeout: 15000 });
     }
 
+    // --- RESTORED: Base coordinate detection for accurate distance ---
+    let baseCoords: Coordinates | null = null;
+    for (let i = 0; i < 5; i++) {
+      baseCoords = extractCoordsFromUrl(page.url());
+      if (baseCoords && (baseCoords.lat !== -6.1751 || baseCoords.lng !== 106.8272)) break;
+      await page.waitForTimeout(800);
+    }
+    if (!baseCoords) baseCoords = { lat: -6.1751, lng: 106.8272 };
+    // -----------------------------------------------------------------
+
     // --- NEW: Fast Bulk Extraction Only ---
     // We scroll once to get enough items, then extract all at once.
-    // This avoids the expensive clicking loop that causes timeouts and duplicated data.
     const scrollTarget = offset + limit + 5;
     await scrollResults(page, scrollTarget);
 
     const leads: ScrapeResult[] = [];
     const seenNames = new Set<string>();
 
-    const allVisibleLeads = await extractAllLeadsFromView(page);
+    const allVisibleLeads = await page.evaluate((base: Coordinates | null) => {
+      const items = Array.from(document.querySelectorAll('div[role="article"]'));
+
+      // Helper for distance inside evaluate
+      const calcDist = (c1: {lat:number, lng:number}, c2: {lat:number, lng:number}) => {
+        const R = 6371;
+        const dLat = (c2.lat - c1.lat) * (Math.PI / 180);
+        const dLng = (c2.lng - c1.lng) * (Math.PI / 180);
+        const a = Math.sin(dLat/2)**2 + Math.cos(c1.lat*(Math.PI/180)) * Math.cos(c2.lat*(Math.PI/180)) * Math.sin(dLng/2)**2;
+        return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+      };
+
+      return items.map(el => {
+        const name = el.getAttribute('aria-label') || 'Unknown';
+        const text = (el as HTMLElement).innerText;
+
+        // Robust Phone check (look for tel: links first, then regex)
+        const telLink = el.querySelector('a[href^="tel:"]');
+        let phone = telLink ? (telLink as HTMLAnchorElement).href.replace('tel:', '').trim() : null;
+
+        if (!phone) {
+          // EVEN MORE robust phone regex for ID (Mobile, Landline, WhatsApp formats)
+          const phoneMatch = text.match(/(?:\+62|62|0)8[1-9][0-9\s-]{7,15}/) ||
+                            text.match(/(?:\(0\d{2,3}\)|0\d{2,3})[\s-]?\d{5,9}/) ||
+                            text.match(/\d{3,4}[\s-]\d{3,4}[\s-]\d{3,4}/);
+          phone = phoneMatch ? phoneMatch[0].trim() : null;
+        }
+
+        // Clean up phone
+        if (phone) {
+          phone = phone.replace(/[^\d\s\-\+\(\)]/g, '').trim();
+          // Avoid common false positives (like coordinates caught by mistake)
+          if (phone.length < 5) phone = null;
+        }
+
+        const distTextMatch = text.match(/\d+([.,]\d+)?\s*(km|m)\b/i);
+        let distance = distTextMatch ? distTextMatch[0] : null;
+
+        // Try to get coordinates from the link for more accurate distance
+        const link = el.querySelector('a[href*="/maps/place/"]');
+        if (link && base) {
+          const href = (link as HTMLAnchorElement).href;
+          const coordMatch = href.match(/!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/) || href.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/);
+          if (coordMatch) {
+            const d = calcDist(base, {lat: parseFloat(coordMatch[1]), lng: parseFloat(coordMatch[2])});
+            distance = d < 1 ? `${(d * 1000).toFixed(0)} m` : `${d.toFixed(1)} km`;
+          }
+        }
+
+        // Robust Website check
+        const webBtn = el.querySelector('a[aria-label*="Website"], a[aria-label*="Situs"], a[data-value="Website"], a[data-tooltip*="Website"]');
+        let website = webBtn ? (webBtn as HTMLAnchorElement).href : null;
+        if (website && (website.includes('google.com') || website.includes('search') || website.includes('javascript:'))) website = null;
+
+        return {
+          name,
+          phone: phone,
+          website: website || null,
+          distance,
+          email: null
+        };
+      });
+    }, baseCoords);
+
     console.log(`Berhasil mengekstrak ${allVisibleLeads.length} data dari list view.`);
 
     // Skip items before offset

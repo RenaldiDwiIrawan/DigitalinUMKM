@@ -4,7 +4,7 @@ import { useState } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { MapPin, Phone, Mail, Globe, Eye, Star, Trash2, Zap, Download } from "lucide-react"
+import { MapPin, Phone, Mail, Globe, Eye, Star, Trash2, Zap, Download, Loader2 } from "lucide-react"
 import { exportToCSV } from "@/lib/utils"
 
 export interface Lead {
@@ -128,18 +128,18 @@ export function LeadCard({ lead, selectedLead, setSelectedLead, setViewingLead, 
               </div>
             )}
             {!lead.website && (
-              <div className="flex items-center justify-between gap-2 text-[11px] font-medium text-gray-400 italic opacity-60">
-                <div className="flex items-center gap-2 truncate">
+              <div className="flex items-center justify-between gap-2 text-[11px] font-medium text-gray-400 italic">
+                <div className="flex items-center gap-2 truncate opacity-60">
                   <Globe className="w-3 h-3" />
                   <span className="truncate">Website N/A</span>
                 </div>
                 <button
                   onClick={enrichWebsite}
                   disabled={isEnrichingWebsite}
-                  className="shrink-0 text-[9px] font-bold text-blue-600 hover:text-blue-700 disabled:opacity-50 flex items-center gap-1 not-italic opacity-100"
+                  className="shrink-0 text-[9px] font-bold text-white bg-blue-600 hover:bg-blue-700 px-2 py-1 rounded-lg disabled:opacity-50 flex items-center gap-1 not-italic transition-all shadow-sm shadow-blue-200 active:scale-95"
                 >
                   {isEnrichingWebsite ? (
-                    <Zap className="w-2 h-2 animate-pulse" />
+                    <Loader2 className="w-2 h-2 animate-spin" />
                   ) : (
                     <Globe className="w-2 h-2" />
                   )}
