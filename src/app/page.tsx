@@ -32,9 +32,15 @@ export default function ScraperDashboard() {
   const handleScrape = async (e?: React.FormEvent, isContinuation = false) => {
     if (e) e.preventDefault()
     setError(null)
-    setPartialWarning(null)
+
+    if (!isContinuation) {
+      setLeads([]) // Clear existing leads only for new search
+      setPartialWarning(null)
+    } else {
+      setPartialWarning(` Server Terputus, Melanjutkan pencarian otomatis (${leads.length} data ditemukan)...`);
+    }
+
     setCanContinue(false)
-    if (!isContinuation) setLeads([]) // Clear existing leads only for new search
     setIsProcessing(true)
 
     const limitValue = parseInt(String(form.limit));
@@ -96,17 +102,28 @@ export default function ScraperDashboard() {
 
       const totalLeads = currentOffset + newLeadsCount;
 
-      // Check for partial results after stream ends
+      // Auto-continuation logic
       if (totalLeads > 0 && totalLeads < limitRequested) {
-        setPartialWarning(`Hanya ditemukan ${totalLeads} dari ${limitRequested} data. Vercel limit 10s mungkin tercapai. Klik "Lanjutkan Cari" untuk mencari sisanya.`);
-        setCanContinue(true);
+        if (newLeadsCount > 0) {
+          // Found new leads, continue automatically
+          setPartialWarning(`Server Terputus, Melanjutkan otomatis (${totalLeads}/${limitRequested})...`);
+          setTimeout(() => handleScrape(undefined, true), 500);
+        } else {
+          // No new leads found in this batch, probably end of results
+          setPartialWarning(`Pencarian selesai. Ditemukan ${totalLeads} data (hasil maksimal di lokasi/radius ini).`);
+          setCanContinue(false);
+        }
+      } else {
+        setPartialWarning(null);
       }
 
     } catch (err: any) {
-      setError(err.message || 'Terjadi kesalahan saat scraping.')
       // If we already have some leads, allow continuing despite error (likely timeout)
       if (leads.length > 0 || currentOffset > 0) {
-        setCanContinue(true);
+        setPartialWarning(`Koneksi terputus. Mencoba melanjutkan otomatis...`);
+        setTimeout(() => handleScrape(undefined, true), 1500);
+      } else {
+        setError(err.message || 'Terjadi kesalahan saat scraping.')
       }
     } finally {
       setIsProcessing(false)
