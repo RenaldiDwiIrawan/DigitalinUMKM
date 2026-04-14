@@ -432,31 +432,34 @@ export async function scrapeGoogleMaps(options: ScrapeOptions): Promise<ScrapeRe
 
       return items.map(el => {
         const name = el.getAttribute('aria-label') || 'Unknown';
-        const text = (el as HTMLElement).innerText;
+        const text = (el as HTMLElement).innerText || '';
 
-        // Robust Phone check (look for tel: links first, then regex)
+        // 1. Better Phone Extraction
+        // Look for tel: link anywhere inside the element
         const telLink = el.querySelector('a[href^="tel:"]');
         let phone = telLink ? (telLink as HTMLAnchorElement).href.replace('tel:', '').trim() : null;
 
         if (!phone) {
-          // EVEN MORE robust phone regex for ID (Mobile, Landline, WhatsApp formats)
-          const phoneMatch = text.match(/(?:\+62|62|0)8[1-9][0-9\s-]{7,15}/) ||
-                            text.match(/(?:\(0\d{2,3}\)|0\d{2,3})[\s-]?\d{5,9}/) ||
-                            text.match(/\d{3,4}[\s-]\d{3,4}[\s-]\d{3,4}/);
-          phone = phoneMatch ? phoneMatch[0].trim() : null;
+          // Look for common Indonesian phone patterns in all text content
+          // Mobile: 08xx, Landline: (02x), 02x-..., etc.
+          const phoneRegex = /(?:\+62|62|0)[2-9]\d{1,2}[\s.-]?\d{3,5}[\s.-]?\d{3,5}/g;
+          const matches = text.match(phoneRegex);
+          if (matches) {
+            // Pick the first match that looks like a real phone number (length > 7)
+            phone = matches.find(m => m.replace(/[^\d]/g, '').length >= 7) || null;
+          }
         }
 
-        // Clean up phone
+        // Clean up phone string
         if (phone) {
           phone = phone.replace(/[^\d\s\-\+\(\)]/g, '').trim();
-          // Avoid common false positives (like coordinates caught by mistake)
-          if (phone.length < 5) phone = null;
+          if (phone.length < 7) phone = null;
         }
 
+        // 2. Accurate Distance
         const distTextMatch = text.match(/\d+([.,]\d+)?\s*(km|m)\b/i);
         let distance = distTextMatch ? distTextMatch[0] : null;
 
-        // Try to get coordinates from the link for more accurate distance
         const link = el.querySelector('a[href*="/maps/place/"]');
         if (link && base) {
           const href = (link as HTMLAnchorElement).href;
@@ -467,14 +470,14 @@ export async function scrapeGoogleMaps(options: ScrapeOptions): Promise<ScrapeRe
           }
         }
 
-        // Robust Website check
+        // 3. Website Extraction
         const webBtn = el.querySelector('a[aria-label*="Website"], a[aria-label*="Situs"], a[data-value="Website"], a[data-tooltip*="Website"]');
         let website = webBtn ? (webBtn as HTMLAnchorElement).href : null;
         if (website && (website.includes('google.com') || website.includes('search') || website.includes('javascript:'))) website = null;
 
         return {
           name,
-          phone: phone,
+          phone: phone || null,
           website: website || null,
           distance,
           email: null
@@ -538,36 +541,51 @@ export async function scrapeLeadDetailsByName(name: string, location: string): P
     const searchQuery = `${name} ${location}`;
     const searchUrl = `https://www.google.com/maps/search/${encodeURIComponent(searchQuery)}`;
 
+    console.log(`Mencari detail untuk: ${name}...`);
     await page.goto(searchUrl, { waitUntil: 'load', timeout: 30000 });
 
-    // Find the item that matches the name
-    await page.waitForSelector('div[role="article"]', { timeout: 10000 });
-    const items = page.locator('div[role="article"]');
-    const count = await items.count();
+    // 1. Wait for either the results list OR the direct business panel
+    // The panel has the class .DUwDvf or data-item-id="title"
+    const resultsOrPanel = await Promise.race([
+      page.waitForSelector('div[role="article"]', { timeout: 15000 }).then(() => 'list'),
+      page.waitForSelector('.DUwDvf', { timeout: 15000 }).then(() => 'panel'),
+      page.waitForSelector('[data-item-id="title"]', { timeout: 15000 }).then(() => 'panel')
+    ]).catch(() => 'timeout');
 
-    let targetItem = null;
-    for (let i = 0; i < Math.min(count, 5); i++) {
-      const ariaLabel = await items.nth(i).getAttribute('aria-label');
-      if (ariaLabel?.toLowerCase().includes(name.toLowerCase()) || name.toLowerCase().includes(ariaLabel?.toLowerCase() || '')) {
-        targetItem = items.nth(i);
-        break;
+    if (resultsOrPanel === 'timeout') {
+      console.error(`Timeout mencari ${name}: Tidak ada hasil atau panel yang muncul.`);
+      await browser.close();
+      return {};
+    }
+
+    if (resultsOrPanel === 'list') {
+      const items = page.locator('div[role="article"]');
+      const count = await items.count();
+
+      let targetItem = null;
+      for (let i = 0; i < Math.min(count, 5); i++) {
+        const ariaLabel = await items.nth(i).getAttribute('aria-label');
+        if (ariaLabel?.toLowerCase().includes(name.toLowerCase()) || name.toLowerCase().includes(ariaLabel?.toLowerCase() || '')) {
+          targetItem = items.nth(i);
+          break;
+        }
+      }
+
+      if (targetItem) {
+        await targetItem.click();
+        await page.waitForSelector('.DUwDvf', { timeout: 10000 }).catch(() => {});
+      } else {
+        // If not matched, maybe it's still correct but name is slightly different
+        // Let's try the first one as a fallback
+        await items.first().click();
+        await page.waitForSelector('.DUwDvf', { timeout: 10000 }).catch(() => {});
       }
     }
 
-    if (!targetItem) {
-      // If not found in list, maybe it opened directly? Check panel name
-      const panelName = await page.locator('.DUwDvf').first().innerText().catch(() => '');
-      if (!panelName.toLowerCase().includes(name.toLowerCase())) {
-        await browser.close();
-        return {};
-      }
-    } else {
-      await targetItem.click();
-      await page.waitForSelector('.DUwDvf', { timeout: 8000 });
-    }
+    // Small wait for panel content to settle
+    await page.waitForTimeout(1000);
 
-    // Reuse extraction logic from extractLeadDetails but for the current page
-    // (Simplified here for brevity but following same patterns)
+    // 2. Extract from panel
     const details = await page.evaluate(() => {
       const findByItemId = (pattern: string) => {
         const el = Array.from(document.querySelectorAll('[data-item-id]')).find(el =>
@@ -577,17 +595,32 @@ export async function scrapeLeadDetailsByName(name: string, location: string): P
         return el ? (el as HTMLElement).innerText.trim() : null;
       };
 
+      // 1. Find phone
       let phone = findByItemId('phone:tel:');
+      if (!phone) {
+        const phoneLinks = Array.from(document.querySelectorAll('a[href^="tel:"]'))
+          .filter(el => (el as HTMLElement).offsetParent !== null);
+        phone = phoneLinks.length > 0 ? (phoneLinks[0] as HTMLAnchorElement).href.replace('tel:', '').trim() : null;
+      }
+
+      // 2. Find website
       const webEl = Array.from(document.querySelectorAll('[data-item-id="authority"]'))
         .find(el => (el as HTMLElement).offsetParent !== null);
       let website = webEl ? (webEl as HTMLAnchorElement).href : null;
 
-      if (website && website.includes('google.com')) website = null;
+      if (!website) {
+        const webBtn = Array.from(document.querySelectorAll('a[aria-label*="Website"], a[aria-label*="Situs"], a[data-tooltip*="Situs"], a[data-tooltip*="website"]'))
+          .find(el => (el as HTMLElement).offsetParent !== null);
+        website = webBtn ? (webBtn as HTMLAnchorElement).href : null;
+      }
+
+      if (website && (website.includes('google.com') || website.includes('search'))) website = null;
       if (phone) phone = phone.replace(/[^\d\s\-\+\(\)]/g, '').trim();
 
       return { phone, website };
     });
 
+    console.log(`Berhasil mendapatkan detail untuk ${name}:`, details);
     await browser.close();
     return details;
   } catch (error) {

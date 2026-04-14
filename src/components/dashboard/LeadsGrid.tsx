@@ -115,24 +115,39 @@ export function LeadCard({ lead, selectedLead, setSelectedLead, setViewingLead, 
           </h3>
 
           <div className="space-y-2 mt-auto">
-            {lead.phone && (
-              <div className="flex items-center gap-2 text-[11px] font-medium text-gray-500">
+            <div className="flex items-center justify-between gap-2 text-[11px] font-medium text-gray-500">
+              <div className="flex items-center gap-2 truncate">
                 <Phone className="w-3 h-3 text-blue-400" />
-                <span className="truncate">{lead.phone}</span>
+                <span className={`truncate ${lead.phone ? '' : 'italic opacity-60'}`}>
+                  {lead.phone || 'Telepon N/A'}
+                </span>
               </div>
-            )}
-            {lead.website && (
-              <div className="flex items-center gap-2 text-[11px] font-medium text-gray-500">
+              {!lead.phone && (
+                <button
+                  onClick={enrichWebsite}
+                  disabled={isEnrichingWebsite}
+                  className="shrink-0 text-[9px] font-bold text-white bg-blue-600 hover:bg-blue-700 px-2 py-1 rounded-lg disabled:opacity-50 flex items-center gap-1 not-italic transition-all shadow-sm shadow-blue-200 active:scale-95"
+                >
+                  {isEnrichingWebsite ? (
+                    <Loader2 className="w-2 h-2 animate-spin" />
+                  ) : (
+                    <Zap className="w-2 h-2" />
+                  )}
+                  {isEnrichingWebsite ? '...' : 'Cari Telp'}
+                </button>
+              )}
+            </div>
+
+            <div className="flex items-center justify-between gap-2 text-[11px] font-medium text-gray-500">
+              <div className="flex items-center gap-2 truncate">
                 <Globe className="w-3 h-3 text-blue-400" />
-                <span className="truncate">{lead.website.replace(/^https?:\/\//, '').split('/')[0]}</span>
+                {lead.website ? (
+                  <span className="truncate">{lead.website.replace(/^https?:\/\//, '').split('/')[0]}</span>
+                ) : (
+                  <span className="italic opacity-60">Website N/A</span>
+                )}
               </div>
-            )}
-            {!lead.website && (
-              <div className="flex items-center justify-between gap-2 text-[11px] font-medium text-gray-400 italic">
-                <div className="flex items-center gap-2 truncate opacity-60">
-                  <Globe className="w-3 h-3" />
-                  <span className="truncate">Website N/A</span>
-                </div>
+              {!lead.website && (
                 <button
                   onClick={enrichWebsite}
                   disabled={isEnrichingWebsite}
@@ -143,10 +158,11 @@ export function LeadCard({ lead, selectedLead, setSelectedLead, setViewingLead, 
                   ) : (
                     <Globe className="w-2 h-2" />
                   )}
-                  {isEnrichingWebsite ? 'Mencari...' : 'Cari Website'}
+                  {isEnrichingWebsite ? '...' : 'Cari Web'}
                 </button>
-              </div>
-            )}
+              )}
+            </div>
+
             <div className="flex items-center justify-between gap-2 text-[11px] font-medium text-gray-500">
               <div className="flex items-center gap-2 truncate">
                 <Mail className="w-3 h-3 text-gray-400" />
@@ -161,11 +177,11 @@ export function LeadCard({ lead, selectedLead, setSelectedLead, setViewingLead, 
                   className="shrink-0 text-[9px] font-bold text-blue-600 hover:text-blue-700 disabled:opacity-50 flex items-center gap-1"
                 >
                   {isEnriching ? (
-                    <Zap className="w-2 h-2 animate-pulse" />
+                    <Loader2 className="w-2 h-2 animate-spin" />
                   ) : (
                     <Zap className="w-2 h-2" />
                   )}
-                  {isEnriching ? 'Mencari...' : 'Cari Email'}
+                  {isEnriching ? '...' : 'Cari Email'}
                 </button>
               )}
             </div>
