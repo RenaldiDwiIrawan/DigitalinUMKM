@@ -9,7 +9,10 @@
       "WebSearch",
       "WebFetch(domain:www.scrapingbee.com)",
       "Bash(npx tsx:*)",
-      "Bash(curl:*)"
+      "Bash(curl:*)",
+      "Bash(git add:*)",
+      "Bash(git commit -m ':*)",
+      "Bash(git push:*)"
     ]
   }
 }
