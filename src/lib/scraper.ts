@@ -144,20 +144,32 @@ export async function findEmailFromWebsite(context: BrowserContext, url: string)
  */
 async function scrollResults(page: Page, limit: number): Promise<void> {
   const scrollContainerSelector = 'div[role="feed"], div[aria-label^="Results"], .m6qeH.tL9Q4c';
-  const maxScrollAttempts = 12; // Reduced further for speed
+  const maxScrollAttempts = 25; // Increased to handle larger limits
   let scrollAttempts = 0;
+  let lastCount = 0;
+  let stagnantAttempts = 0;
 
   console.log(`Turbo Scrolling: mencari hingga ${limit} data...`);
 
   while (scrollAttempts < maxScrollAttempts) {
     const itemsCount = (await page.$$('div[role="article"]')).length;
-    if (itemsCount >= limit) break; // Exact limit check
+    if (itemsCount >= limit) break;
+
+    // Detect if we are stuck
+    if (itemsCount === lastCount) {
+      stagnantAttempts++;
+      if (stagnantAttempts > 3) break; // Stop if no new items after 3 scrolls
+    } else {
+      stagnantAttempts = 0;
+    }
+    lastCount = itemsCount;
 
     const isEndReached = await page.evaluate(() => {
       const endText = document.body.innerText;
       return endText.includes("reached the end") ||
              endText.includes("Hasil akhir") ||
-             endText.includes("Tidak ada hasil lagi");
+             endText.includes("Tidak ada hasil lagi") ||
+             !!document.querySelector('.HlvSq'); // End of results indicator
     });
 
     if (isEndReached) break;
@@ -165,14 +177,14 @@ async function scrollResults(page: Page, limit: number): Promise<void> {
     await page.evaluate((selector) => {
       const container = document.querySelector(selector);
       if (container) {
-        container.scrollTop += 5000; // Even more aggressive scroll
+        container.scrollTop += 3000; // Slightly less aggressive to trigger lazy load reliably
       } else {
-        window.scrollBy(0, 5000);
+        window.scrollBy(0, 3000);
       }
     }, scrollContainerSelector);
 
-    // Minimal wait for content to load
-    await page.waitForTimeout(400);
+    // Wait slightly longer for content to load
+    await page.waitForTimeout(600);
     scrollAttempts++;
   }
 }
@@ -188,8 +200,10 @@ async function extractLeadDetails(page: Page, item: Locator, baseCoords: Coordin
     // Get fallback details from list view before clicking
     const listDetails = await item.evaluate((el: HTMLElement) => {
       const text = el.innerText;
-      // Improved Indonesian phone regex
-      const phoneMatch = text.match(/(?:\+62|62|0)8[1-9][0-9]{7,11}/) || text.match(/(\+62|08)\d{2,4}[-\s]?\d{3,4}[-\s]?\d{3,4}/);
+      const ariaLabel = el.getAttribute('aria-label') || '';
+      // Improved Indonesian phone regex including mobile and landline
+      const phoneMatch = text.match(/(?:\+62|62|0)(?:\d{2,4})[\s.-]?(?:\d{3,5})[\s.-]?(?:\d{3,5})|(?:\+62|62|0)8[1-9][0-9]{7,11}/) ||
+                         ariaLabel.match(/(?:\+62|62|0)(?:\d{2,4})[\s.-]?(?:\d{3,5})[\s.-]?(?:\d{3,5})|(?:\+62|62|0)8[1-9][0-9]{7,11}/);
       const distanceMatch = text.match(/\d+([.,]\d+)?\s*(km|m)\b/i);
 
       // Extract website ONLY if it looks like a dedicated website button (globe icon link)
@@ -384,9 +398,9 @@ export async function scrapeGoogleMaps(options: ScrapeOptions): Promise<ScrapeRe
     const type = request.resourceType();
     const url = request.url();
 
-    // Block images, fonts, media, and third-party trackers
-    // NOTE: Keep stylesheets to avoid layout issues that break scraping
-    if (['image', 'font', 'media'].includes(type) ||
+    // Block images, media, and third-party trackers
+    // NOTE: Keep fonts and stylesheets to avoid layout issues that break scraping
+    if (['image', 'media'].includes(type) ||
         url.includes('google-analytics') ||
         url.includes('analytics') ||
         url.includes('doubleclick') ||
@@ -414,13 +428,17 @@ export async function scrapeGoogleMaps(options: ScrapeOptions): Promise<ScrapeRe
     }
 
     // --- RESTORED: Base coordinate detection for accurate distance ---
-    let baseCoords: Coordinates | null = null;
-    // Faster detection
-    for (let i = 0; i < 3; i++) {
-      baseCoords = extractCoordsFromUrl(page.url());
-      if (baseCoords && (baseCoords.lat !== -6.1751 || baseCoords.lng !== 106.8272)) break;
-      await page.waitForTimeout(400);
+    let baseCoords: Coordinates | null = (lat !== undefined && lng !== undefined) ? { lat, lng } : null;
+
+    // If no coordinates provided in options, detect from URL
+    if (!baseCoords) {
+      for (let i = 0; i < 3; i++) {
+        baseCoords = extractCoordsFromUrl(page.url());
+        if (baseCoords && (baseCoords.lat !== -6.1751 || baseCoords.lng !== 106.8272)) break;
+        await page.waitForTimeout(400);
+      }
     }
+
     if (!baseCoords) baseCoords = { lat: -6.1751, lng: 106.8272 };
     // -----------------------------------------------------------------
 
@@ -437,7 +455,8 @@ export async function scrapeGoogleMaps(options: ScrapeOptions): Promise<ScrapeRe
 
       return items.map(el => {
         const ariaLabel = el.getAttribute('aria-label') || '';
-        const name = ariaLabel.split(' · ')[0] || el.getAttribute('aria-label') || 'Unknown';
+        const titleEl = el.querySelector('.qBF1Pd, .fontHeadlineSmall');
+        const name = titleEl ? (titleEl as HTMLElement).innerText : (ariaLabel.split(' · ')[0] || ariaLabel || 'Unknown');
         const text = (el as HTMLElement).innerText || '';
         const fullContent = ariaLabel + ' ' + text;
 
@@ -446,11 +465,18 @@ export async function scrapeGoogleMaps(options: ScrapeOptions): Promise<ScrapeRe
         let phone = telLink ? (telLink as HTMLAnchorElement).href.replace('tel:', '').trim() : null;
 
         if (!phone) {
-          const phoneRegex = /(?:\+62|62|0)(?:\d{2,3})[\s.-]?(?:\d{3,5})[\s.-]?(?:\d{3,5})|(?:\+62|62|0)8[1-9][0-9]{7,11}/g;
+          // Robust Indonesian phone regex including mobile and landline
+          const phoneRegex = /(?:\+62|62|0)(?:\d{2,4})[\s.-]?(?:\d{3,5})[\s.-]?(?:\d{3,5})|(?:\+62|62|0)8[1-9][0-9]{7,11}/g;
           const matches = fullContent.match(phoneRegex);
           if (matches) {
             phone = matches.find(m => m.replace(/[^\d]/g, '').length >= 7) || null;
           }
+        }
+
+        if (!phone) {
+          // Check aria-label specifically as Google often puts details there
+          const ariaPhoneMatch = ariaLabel.match(/(?:\+62|62|0)8[1-9][0-9]{7,11}/) || ariaLabel.match(/(?:\+62|62|0)\d{2,4}[-\s]?\d{3,4}[-\s]?\d{3,4}/);
+          if (ariaPhoneMatch) phone = ariaPhoneMatch[0];
         }
 
         if (!phone) {
