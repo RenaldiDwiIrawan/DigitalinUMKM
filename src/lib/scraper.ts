@@ -206,13 +206,12 @@ async function extractLeadDetails(page: Page, item: Locator, baseCoords: Coordin
       const ariaLabel = el.getAttribute('aria-label') || '';
       const fullContent = ariaLabel + ' ' + text;
 
-      // Robust Indonesian phone regex including mobile and landline
-      const phoneRegex = /(?:\+62|62|0)(?:\d{2,4})[\s.-]?(?:\d{3,5})[\s.-]?(?:\d{3,5})|(?:\+62|62|0)8[1-9][0-9]{7,11}/g;
-      const matches = fullContent.match(phoneRegex);
-      let phoneMatch = null;
+      // Helper function to extract best phone from a string
+      const extractBestPhone = (input: string) => {
+        const phoneRegex = /(?:\+62|62|0)(?:\d{2,4})[\s.-]?(?:\d{3,5})[\s.-]?(?:\d{3,5})|(?:\+62|62|0)8[1-9][0-9]{7,11}/g;
+        const matches = input.match(phoneRegex);
+        if (!matches) return null;
 
-      if (matches) {
-        // Priority matching to avoid metadata garbage
         const prioritizedMatches = matches.sort((a, b) => {
           const score = (s: string) => {
             const digits = s.replace(/[^\d]/g, '');
@@ -224,12 +223,13 @@ async function extractLeadDetails(page: Page, item: Locator, baseCoords: Coordin
           return score(b) - score(a);
         });
 
-        phoneMatch = prioritizedMatches.find(m => {
+        return prioritizedMatches.find(m => {
           const digits = m.replace(/[^\d]/g, '');
           return digits.length >= 7 && !/^19\d{2}$|^20\d{2}$/.test(digits);
         }) || null;
-      }
+      };
 
+      const phoneMatch = extractBestPhone(fullContent);
       const distanceMatch = text.match(/\d+([.,]\d+)?\s*(km|m)\b/i);
 
       // Extract website ONLY if it looks like a dedicated website button (globe icon link)
@@ -485,6 +485,29 @@ export async function scrapeGoogleMaps(options: ScrapeOptions): Promise<ScrapeRe
     const allVisibleLeads = await page.evaluate((base: Coordinates | null) => {
       const items = Array.from(document.querySelectorAll('div[role="article"]'));
 
+      // Helper function to extract best phone from a string
+      const extractBestPhone = (input: string) => {
+        const phoneRegex = /(?:\+62|62|0)(?:\d{2,4})[\s.-]?(?:\d{3,5})[\s.-]?(?:\d{3,5})|(?:\+62|62|0)8[1-9][0-9]{7,11}/g;
+        const matches = input.match(phoneRegex);
+        if (!matches) return null;
+
+        const prioritizedMatches = matches.sort((a, b) => {
+          const score = (s: string) => {
+            const digits = s.replace(/[^\d]/g, '');
+            if (s.startsWith('+62') || s.startsWith('62')) return 100;
+            if (s.startsWith('08')) return 90;
+            if (digits.length >= 10) return 80;
+            return digits.length;
+          };
+          return score(b) - score(a);
+        });
+
+        return prioritizedMatches.find(m => {
+          const digits = m.replace(/[^\d]/g, '');
+          return digits.length >= 7 && !/^19\d{2}$|^20\d{2}$/.test(digits);
+        }) || null;
+      };
+
       return items.map(el => {
         const ariaLabel = el.getAttribute('aria-label') || '';
         const titleEl = el.querySelector('.qBF1Pd, .fontHeadlineSmall');
@@ -497,42 +520,25 @@ export async function scrapeGoogleMaps(options: ScrapeOptions): Promise<ScrapeRe
         let phone = telLink ? (telLink as HTMLAnchorElement).href.replace('tel:', '').trim() : null;
 
         if (!phone) {
-          // Robust Indonesian phone regex including mobile and landline
-          const phoneRegex = /(?:\+62|62|0)(?:\d{2,4})[\s.-]?(?:\d{3,5})[\s.-]?(?:\d{3,5})|(?:\+62|62|0)8[1-9][0-9]{7,11}/g;
-          const matches = fullContent.match(phoneRegex);
-          if (matches) {
-            // Priority matching to avoid metadata garbage like "50 2 01 07 1900"
-            const prioritizedMatches = matches.sort((a, b) => {
-              const score = (s: string) => {
-                const digits = s.replace(/[^\d]/g, '');
-                if (s.startsWith('+62') || s.startsWith('62')) return 100;
-                if (s.startsWith('08')) return 90;
-                if (digits.length >= 10) return 80;
-                return digits.length;
-              };
-              return score(b) - score(a);
-            });
-
-            phone = prioritizedMatches.find(m => {
-              const digits = m.replace(/[^\d]/g, '');
-              // Filter out obvious garbage like years or short sequences
-              return digits.length >= 7 && !/^19\d{2}$|^20\d{2}$/.test(digits);
-            }) || null;
-          }
+          phone = extractBestPhone(fullContent);
         }
 
         if (!phone) {
           const possibleElements = Array.from(el.querySelectorAll('span, div, button'));
           for (const subEl of possibleElements) {
             const subText = (subEl as HTMLElement).innerText || '';
-            if (/(?:\+62|62|0)8[1-9][0-9]{7,11}/.test(subText.replace(/[\s.-]/g, ''))) {
-              phone = subText.trim();
+            const found = extractBestPhone(subText);
+            if (found) {
+              phone = found;
               break;
             }
           }
         }
 
         if (phone) {
+          // Final cleanup - ensure we ONLY return the identified phone number
+          // If we captured extra text around it, the extractBestPhone should have already isolated it
+          // but we apply one last pass to be sure.
           phone = phone.replace(/[^\d\s\-\+\(\)]/g, '').trim();
           if (phone.length < 7) phone = null;
         }
@@ -679,6 +685,29 @@ export async function scrapeLeadDetailsByName(name: string, location: string): P
 
     // 2. Extract from panel
     const details = await page.evaluate(() => {
+      // Helper function to extract best phone from a string
+      const extractBestPhone = (input: string) => {
+        const phoneRegex = /(?:\+62|62|0)(?:\d{2,4})[\s.-]?(?:\d{3,5})[\s.-]?(?:\d{3,5})|(?:\+62|62|0)8[1-9][0-9]{7,11}/g;
+        const matches = input.match(phoneRegex);
+        if (!matches) return null;
+
+        const prioritizedMatches = matches.sort((a, b) => {
+          const score = (s: string) => {
+            const digits = s.replace(/[^\d]/g, '');
+            if (s.startsWith('+62') || s.startsWith('62')) return 100;
+            if (s.startsWith('08')) return 90;
+            if (digits.length >= 10) return 80;
+            return digits.length;
+          };
+          return score(b) - score(a);
+        });
+
+        return prioritizedMatches.find(m => {
+          const digits = m.replace(/[^\d]/g, '');
+          return digits.length >= 7 && !/^19\d{2}$|^20\d{2}$/.test(digits);
+        }) || null;
+      };
+
       // Find phone
       const phoneEl = Array.from(document.querySelectorAll('[data-item-id]')).find(el =>
         (el.getAttribute('data-item-id') || '').includes('phone:tel:') &&
@@ -690,6 +719,11 @@ export async function scrapeLeadDetailsByName(name: string, location: string): P
         const phoneLinks = Array.from(document.querySelectorAll('a[href^="tel:"]'))
           .filter(el => (el as HTMLElement).offsetParent !== null);
         phone = phoneLinks.length > 0 ? (phoneLinks[0] as HTMLAnchorElement).href.replace('tel:', '').trim() : null;
+      }
+
+      // If we found a phone string, ensure it's clean and only contains the number
+      if (phone) {
+        phone = extractBestPhone(phone) || phone;
       }
 
       // Find website
