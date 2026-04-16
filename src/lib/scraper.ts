@@ -204,9 +204,32 @@ async function extractLeadDetails(page: Page, item: Locator, baseCoords: Coordin
     const listDetails = await item.evaluate((el: HTMLElement) => {
       const text = el.innerText;
       const ariaLabel = el.getAttribute('aria-label') || '';
-      // Improved Indonesian phone regex including mobile and landline
-      const phoneMatch = text.match(/(?:\+62|62|0)(?:\d{2,4})[\s.-]?(?:\d{3,5})[\s.-]?(?:\d{3,5})|(?:\+62|62|0)8[1-9][0-9]{7,11}/) ||
-                         ariaLabel.match(/(?:\+62|62|0)(?:\d{2,4})[\s.-]?(?:\d{3,5})[\s.-]?(?:\d{3,5})|(?:\+62|62|0)8[1-9][0-9]{7,11}/);
+      const fullContent = ariaLabel + ' ' + text;
+
+      // Robust Indonesian phone regex including mobile and landline
+      const phoneRegex = /(?:\+62|62|0)(?:\d{2,4})[\s.-]?(?:\d{3,5})[\s.-]?(?:\d{3,5})|(?:\+62|62|0)8[1-9][0-9]{7,11}/g;
+      const matches = fullContent.match(phoneRegex);
+      let phoneMatch = null;
+
+      if (matches) {
+        // Priority matching to avoid metadata garbage
+        const prioritizedMatches = matches.sort((a, b) => {
+          const score = (s: string) => {
+            const digits = s.replace(/[^\d]/g, '');
+            if (s.startsWith('+62') || s.startsWith('62')) return 100;
+            if (s.startsWith('08')) return 90;
+            if (digits.length >= 10) return 80;
+            return digits.length;
+          };
+          return score(b) - score(a);
+        });
+
+        phoneMatch = prioritizedMatches.find(m => {
+          const digits = m.replace(/[^\d]/g, '');
+          return digits.length >= 7 && !/^19\d{2}$|^20\d{2}$/.test(digits);
+        }) || null;
+      }
+
       const distanceMatch = text.match(/\d+([.,]\d+)?\s*(km|m)\b/i);
 
       // Extract website ONLY if it looks like a dedicated website button (globe icon link)
@@ -478,14 +501,24 @@ export async function scrapeGoogleMaps(options: ScrapeOptions): Promise<ScrapeRe
           const phoneRegex = /(?:\+62|62|0)(?:\d{2,4})[\s.-]?(?:\d{3,5})[\s.-]?(?:\d{3,5})|(?:\+62|62|0)8[1-9][0-9]{7,11}/g;
           const matches = fullContent.match(phoneRegex);
           if (matches) {
-            phone = matches.find(m => m.replace(/[^\d]/g, '').length >= 7) || null;
-          }
-        }
+            // Priority matching to avoid metadata garbage like "50 2 01 07 1900"
+            const prioritizedMatches = matches.sort((a, b) => {
+              const score = (s: string) => {
+                const digits = s.replace(/[^\d]/g, '');
+                if (s.startsWith('+62') || s.startsWith('62')) return 100;
+                if (s.startsWith('08')) return 90;
+                if (digits.length >= 10) return 80;
+                return digits.length;
+              };
+              return score(b) - score(a);
+            });
 
-        if (!phone) {
-          // Check aria-label specifically as Google often puts details there
-          const ariaPhoneMatch = ariaLabel.match(/(?:\+62|62|0)8[1-9][0-9]{7,11}/) || ariaLabel.match(/(?:\+62|62|0)\d{2,4}[-\s]?\d{3,4}[-\s]?\d{3,4}/);
-          if (ariaPhoneMatch) phone = ariaPhoneMatch[0];
+            phone = prioritizedMatches.find(m => {
+              const digits = m.replace(/[^\d]/g, '');
+              // Filter out obvious garbage like years or short sequences
+              return digits.length >= 7 && !/^19\d{2}$|^20\d{2}$/.test(digits);
+            }) || null;
+          }
         }
 
         if (!phone) {
