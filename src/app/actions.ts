@@ -19,7 +19,7 @@ export async function runScraper(query: string, location: string, limit: number 
         fs.mkdirSync(outputDir, { recursive: true });
         fs.writeFileSync(filePath, JSON.stringify(results, null, 2));
 
-        console.log(`Successfully saved ${results.length} results to ${filePath}`);
+        console.log(`Successfully saved ${results.leads.length} results to ${filePath}`);
       } catch (fsError) {
         console.warn('Failed to save results to file (expected on Vercel):', fsError);
       }
