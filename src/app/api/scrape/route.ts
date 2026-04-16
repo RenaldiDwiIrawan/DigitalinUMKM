@@ -27,7 +27,7 @@ export async function POST(req: NextRequest) {
       };
 
       try {
-        await scrapeGoogleMaps({
+        const result = await scrapeGoogleMaps({
           query,
           location,
           lat,
@@ -41,7 +41,7 @@ export async function POST(req: NextRequest) {
           }
         });
 
-        send({ type: 'done' });
+        send({ type: 'done', isDone: result.isDone });
         controller.close();
       } catch (error: any) {
         send({ type: 'error', message: error.message });

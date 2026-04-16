@@ -142,12 +142,13 @@ export async function findEmailFromWebsite(context: BrowserContext, url: string)
 /**
  * Handles scrolling in the Google Maps results panel to load more items.
  */
-async function scrollResults(page: Page, limit: number): Promise<void> {
+async function scrollResults(page: Page, limit: number): Promise<boolean> {
   const scrollContainerSelector = 'div[role="feed"], div[aria-label^="Results"], .m6qeH.tL9Q4c';
   const maxScrollAttempts = 25; // Increased to handle larger limits
   let scrollAttempts = 0;
   let lastCount = 0;
   let stagnantAttempts = 0;
+  let reachedEnd = false;
 
   console.log(`Turbo Scrolling: mencari hingga ${limit} data...`);
 
@@ -164,7 +165,7 @@ async function scrollResults(page: Page, limit: number): Promise<void> {
     }
     lastCount = itemsCount;
 
-    const isEndReached = await page.evaluate(() => {
+    reachedEnd = await page.evaluate(() => {
       const endText = document.body.innerText;
       return endText.includes("reached the end") ||
              endText.includes("Hasil akhir") ||
@@ -172,7 +173,7 @@ async function scrollResults(page: Page, limit: number): Promise<void> {
              !!document.querySelector('.HlvSq'); // End of results indicator
     });
 
-    if (isEndReached) break;
+    if (reachedEnd) break;
 
     await page.evaluate((selector) => {
       const container = document.querySelector(selector);
@@ -187,6 +188,8 @@ async function scrollResults(page: Page, limit: number): Promise<void> {
     await page.waitForTimeout(600);
     scrollAttempts++;
   }
+
+  return reachedEnd;
 }
 
 /**
@@ -360,12 +363,17 @@ async function extractLeadDetails(page: Page, item: Locator, baseCoords: Coordin
   }
 }
 
+export interface ScrapeResponse {
+  leads: ScrapeResult[];
+  isDone: boolean;
+}
+
 /**
  * Main function to scrape Google Maps leads.
  * OPTIMIZED: Now only extracts data from the list view to stay under Vercel's 10s limit.
  * Expensive deep scraping (clicking) is now moved to a manual process.
  */
-export async function scrapeGoogleMaps(options: ScrapeOptions): Promise<ScrapeResult[]> {
+export async function scrapeGoogleMaps(options: ScrapeOptions): Promise<ScrapeResponse> {
   const {
     query,
     location,
@@ -444,8 +452,9 @@ export async function scrapeGoogleMaps(options: ScrapeOptions): Promise<ScrapeRe
 
     // --- NEW: Fast Bulk Extraction Only ---
     // We scroll once to get enough items, then extract all at once.
-    const scrollTarget = offset + limit + 5;
-    await scrollResults(page, scrollTarget);
+    // If radius is active, we scroll more aggressively to find enough matching results.
+    const scrollTarget = radius ? offset + (limit * 3) + 10 : offset + limit + 5;
+    const reachedEnd = await scrollResults(page, scrollTarget);
 
     const leads: ScrapeResult[] = [];
     const seenNames = new Set<string>();
@@ -560,12 +569,17 @@ export async function scrapeGoogleMaps(options: ScrapeOptions): Promise<ScrapeRe
       console.log(`[Extracted] ${lead.name} (${lead.phone || 'No Phone'})`);
     }
 
-    if (leads.length === 0 && offset === 0) {
+    if (leads.length === 0 && offset === 0 && reachedEnd) {
       throw new Error(`Tidak ditemukan hasil valid untuk "${query}" di "${location}".`);
     }
 
     await browser.close();
-    return leads;
+    // We are done if we reached the actual end of Google Maps results
+    // or if we found enough leads to satisfy the limit.
+    return {
+      leads,
+      isDone: reachedEnd || leads.length >= limit
+    };
 
   } catch (error: any) {
     console.error('Terjadi kesalahan saat scraping:', error.message);

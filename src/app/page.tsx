@@ -75,6 +75,7 @@ export default function ScraperDashboard() {
       const textDecoder = new TextDecoder()
       let buffer = ''
       let newLeadsCount = 0
+      let serverIsDone = false
 
       while (true) {
         const { done, value } = await reader.read()
@@ -91,6 +92,8 @@ export default function ScraperDashboard() {
             if (payload.type === 'lead') {
               setLeads(prev => [...prev, payload.data])
               newLeadsCount++
+            } else if (payload.type === 'done') {
+              serverIsDone = payload.isDone || false
             } else if (payload.type === 'error') {
               setError(payload.message)
             }
@@ -103,18 +106,23 @@ export default function ScraperDashboard() {
       const totalLeads = currentOffset + newLeadsCount;
 
       // Auto-continuation logic
-      if (totalLeads > 0 && totalLeads < limitRequested) {
-        if (newLeadsCount > 0) {
-          // Found new leads, continue automatically
-          setPartialWarning(`Server Terputus, Melanjutkan otomatis (${totalLeads}/${limitRequested})...`);
-          setTimeout(() => handleScrape(undefined, true), 500);
-        } else {
-          // No new leads found in this batch, probably end of results
-          setPartialWarning(`Pencarian selesai. Ditemukan ${totalLeads} data (hasil maksimal di lokasi/radius ini).`);
-          setCanContinue(false);
-        }
+      // We continue if:
+      // 1. We haven't reached the requested limit
+      // 2. The server hasn't signaled that it reached the absolute end of results
+      if (totalLeads < limitRequested && !serverIsDone) {
+        // If we found NO leads in this batch, but aren't done, we MUST continue
+        // to find results that might be further down (especially with radius filtering)
+        const statusMsg = newLeadsCount > 0
+          ? `Melanjutkan otomatis (${totalLeads}/${limitRequested})...`
+          : `Mencari lebih jauh... (${totalLeads} ditemukan)`;
+
+        setPartialWarning(statusMsg);
+        setTimeout(() => handleScrape(undefined, true), 500);
       } else {
         setPartialWarning(null);
+        if (totalLeads > 0 && totalLeads < limitRequested && serverIsDone) {
+          setPartialWarning(`Pencarian selesai. Ditemukan ${totalLeads} data (hasil maksimal di lokasi/radius ini).`);
+        }
       }
 
     } catch (err: any) {
