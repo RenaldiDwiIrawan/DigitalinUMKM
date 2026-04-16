@@ -144,19 +144,19 @@ export async function findEmailFromWebsite(context: BrowserContext, url: string)
  */
 async function scrollResults(page: Page, limit: number): Promise<void> {
   const scrollContainerSelector = 'div[role="feed"], div[aria-label^="Results"], .m6qeH.tL9Q4c';
-  const maxScrollAttempts = 15; // Reduced for speed
+  const maxScrollAttempts = 12; // Reduced further for speed
   let scrollAttempts = 0;
 
-  console.log(`Mulai scrolling untuk mencari hingga ${limit} data...`);
+  console.log(`Turbo Scrolling: mencari hingga ${limit} data...`);
 
   while (scrollAttempts < maxScrollAttempts) {
     const itemsCount = (await page.$$('div[role="article"]')).length;
-    if (itemsCount >= limit * 1.5) break; // Increased buffer for speed
+    if (itemsCount >= limit) break; // Exact limit check
 
     const isEndReached = await page.evaluate(() => {
       const endText = document.body.innerText;
-      return endText.includes("You've reached the end of the list.") ||
-             endText.includes("Hasil akhir daftar") ||
+      return endText.includes("reached the end") ||
+             endText.includes("Hasil akhir") ||
              endText.includes("Tidak ada hasil lagi");
     });
 
@@ -165,14 +165,14 @@ async function scrollResults(page: Page, limit: number): Promise<void> {
     await page.evaluate((selector) => {
       const container = document.querySelector(selector);
       if (container) {
-        container.scrollTop += 3000; // Increased scroll distance
+        container.scrollTop += 5000; // Even more aggressive scroll
       } else {
-        window.scrollBy(0, 3000);
+        window.scrollBy(0, 5000);
       }
     }, scrollContainerSelector);
 
-    // Faster wait for scroll to settle
-    await page.waitForTimeout(600);
+    // Minimal wait for content to load
+    await page.waitForTimeout(400);
     scrollAttempts++;
   }
 }
@@ -273,27 +273,20 @@ async function extractLeadDetails(page: Page, item: Locator, baseCoords: Coordin
       }
 
       const panelDetails = await page.evaluate(() => {
-        // Helper to find by data-item-id patterns
-        // We look for elements that are likely part of the active side panel
-        const findByItemId = (pattern: string) => {
-          const el = Array.from(document.querySelectorAll('[data-item-id]')).find(el =>
-            (el.getAttribute('data-item-id') || '').includes(pattern) &&
-            (el as HTMLElement).offsetParent !== null // Ensure it's visible
-          );
-          return el ? (el as HTMLElement).innerText.trim() : null;
-        };
+        // Find phone
+        const phoneEl = Array.from(document.querySelectorAll('[data-item-id]')).find(el =>
+          (el.getAttribute('data-item-id') || '').includes('phone:tel:') &&
+          (el as HTMLElement).offsetParent !== null
+        );
+        let phone = phoneEl ? (phoneEl as HTMLElement).innerText.trim() : null;
 
-        // 1. Find phone
-        let phone = findByItemId('phone:tel:');
         if (!phone) {
-          // Search only in visible links
           const phoneLinks = Array.from(document.querySelectorAll('a[href^="tel:"]'))
             .filter(el => (el as HTMLElement).offsetParent !== null);
           phone = phoneLinks.length > 0 ? (phoneLinks[0] as HTMLAnchorElement).href.replace('tel:', '').trim() : null;
         }
 
-        // 2. Find website
-        // Authority is the data-item-id for the website button
+        // Find website
         const webEl = Array.from(document.querySelectorAll('[data-item-id="authority"]'))
           .find(el => (el as HTMLElement).offsetParent !== null);
         let website = webEl ? (webEl as HTMLAnchorElement).href : null;
@@ -380,9 +373,29 @@ export async function scrapeGoogleMaps(options: ScrapeOptions): Promise<ScrapeRe
       ? { latitude: lat, longitude: lng }
       : { longitude: 106.8272, latitude: -6.1751 },
     permissions: ['geolocation'],
-    viewport: { width: 1280, height: 720 }
+    viewport: { width: 800, height: 600 } // Smaller viewport for faster rendering
   });
+
   const page = await context.newPage();
+
+  // TURBO MODE: Block unnecessary resources
+  await page.route('**/*', (route) => {
+    const request = route.request();
+    const type = request.resourceType();
+    const url = request.url();
+
+    // Block images, fonts, media, and third-party trackers
+    // NOTE: Keep stylesheets to avoid layout issues that break scraping
+    if (['image', 'font', 'media'].includes(type) ||
+        url.includes('google-analytics') ||
+        url.includes('analytics') ||
+        url.includes('doubleclick') ||
+        url.includes('googleadservices')) {
+      route.abort();
+    } else {
+      route.continue();
+    }
+  });
 
   const searchQuery = radius ? `${query} near ${location} radius:${radius}km` : `${query} ${location}`;
   let searchUrl = `https://www.google.com/maps/search/${encodeURIComponent(searchQuery)}`;
@@ -392,20 +405,21 @@ export async function scrapeGoogleMaps(options: ScrapeOptions): Promise<ScrapeRe
   }
 
   try {
-    await page.goto(searchUrl, { waitUntil: 'load', timeout: 30000 });
+    await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
     try {
-      await page.waitForSelector('div[role="article"]', { timeout: 15000 });
+      await page.waitForSelector('div[role="article"]', { timeout: 8000 });
     } catch (e) {
-      console.log('Menunggu elemen hasil lebih lama...');
-      await page.waitForSelector('div[role="article"]', { timeout: 15000 });
+      console.log('Menunggu elemen hasil...');
+      await page.waitForSelector('div[role="article"]', { timeout: 5000 }).catch(() => {});
     }
 
     // --- RESTORED: Base coordinate detection for accurate distance ---
     let baseCoords: Coordinates | null = null;
-    for (let i = 0; i < 5; i++) {
+    // Faster detection
+    for (let i = 0; i < 3; i++) {
       baseCoords = extractCoordsFromUrl(page.url());
       if (baseCoords && (baseCoords.lat !== -6.1751 || baseCoords.lng !== 106.8272)) break;
-      await page.waitForTimeout(800);
+      await page.waitForTimeout(400);
     }
     if (!baseCoords) baseCoords = { lat: -6.1751, lng: 106.8272 };
     // -----------------------------------------------------------------
@@ -421,42 +435,41 @@ export async function scrapeGoogleMaps(options: ScrapeOptions): Promise<ScrapeRe
     const allVisibleLeads = await page.evaluate((base: Coordinates | null) => {
       const items = Array.from(document.querySelectorAll('div[role="article"]'));
 
-      // Helper for distance inside evaluate
-      const calcDist = (c1: {lat:number, lng:number}, c2: {lat:number, lng:number}) => {
-        const R = 6371;
-        const dLat = (c2.lat - c1.lat) * (Math.PI / 180);
-        const dLng = (c2.lng - c1.lng) * (Math.PI / 180);
-        const a = Math.sin(dLat/2)**2 + Math.cos(c1.lat*(Math.PI/180)) * Math.cos(c2.lat*(Math.PI/180)) * Math.sin(dLng/2)**2;
-        return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-      };
-
       return items.map(el => {
-        const name = el.getAttribute('aria-label') || 'Unknown';
+        const ariaLabel = el.getAttribute('aria-label') || '';
+        const name = ariaLabel.split(' · ')[0] || el.getAttribute('aria-label') || 'Unknown';
         const text = (el as HTMLElement).innerText || '';
+        const fullContent = ariaLabel + ' ' + text;
 
         // 1. Better Phone Extraction
-        // Look for tel: link anywhere inside the element
         const telLink = el.querySelector('a[href^="tel:"]');
         let phone = telLink ? (telLink as HTMLAnchorElement).href.replace('tel:', '').trim() : null;
 
         if (!phone) {
-          // Look for common Indonesian phone patterns in all text content
-          // Mobile: 08xx, Landline: (02x), 02x-..., etc.
-          const phoneRegex = /(?:\+62|62|0)[2-9]\d{1,2}[\s.-]?\d{3,5}[\s.-]?\d{3,5}/g;
-          const matches = text.match(phoneRegex);
+          const phoneRegex = /(?:\+62|62|0)(?:\d{2,3})[\s.-]?(?:\d{3,5})[\s.-]?(?:\d{3,5})|(?:\+62|62|0)8[1-9][0-9]{7,11}/g;
+          const matches = fullContent.match(phoneRegex);
           if (matches) {
-            // Pick the first match that looks like a real phone number (length > 7)
             phone = matches.find(m => m.replace(/[^\d]/g, '').length >= 7) || null;
           }
         }
 
-        // Clean up phone string
+        if (!phone) {
+          const possibleElements = Array.from(el.querySelectorAll('span, div, button'));
+          for (const subEl of possibleElements) {
+            const subText = (subEl as HTMLElement).innerText || '';
+            if (/(?:\+62|62|0)8[1-9][0-9]{7,11}/.test(subText.replace(/[\s.-]/g, ''))) {
+              phone = subText.trim();
+              break;
+            }
+          }
+        }
+
         if (phone) {
           phone = phone.replace(/[^\d\s\-\+\(\)]/g, '').trim();
           if (phone.length < 7) phone = null;
         }
 
-        // 2. Accurate Distance
+        // 2. Accurate Distance - Inlined Haversine to avoid __name transpiler issue
         const distTextMatch = text.match(/\d+([.,]\d+)?\s*(km|m)\b/i);
         let distance = distTextMatch ? distTextMatch[0] : null;
 
@@ -465,13 +478,19 @@ export async function scrapeGoogleMaps(options: ScrapeOptions): Promise<ScrapeRe
           const href = (link as HTMLAnchorElement).href;
           const coordMatch = href.match(/!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/) || href.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/);
           if (coordMatch) {
-            const d = calcDist(base, {lat: parseFloat(coordMatch[1]), lng: parseFloat(coordMatch[2])});
+            const lat2 = parseFloat(coordMatch[1]);
+            const lng2 = parseFloat(coordMatch[2]);
+            const R = 6371;
+            const dLat = (lat2 - base.lat) * (Math.PI / 180);
+            const dLng = (lng2 - base.lng) * (Math.PI / 180);
+            const a = Math.sin(dLat/2)**2 + Math.cos(base.lat*(Math.PI/180)) * Math.cos(lat2*(Math.PI/180)) * Math.sin(dLng/2)**2;
+            const d = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
             distance = d < 1 ? `${(d * 1000).toFixed(0)} m` : `${d.toFixed(1)} km`;
           }
         }
 
         // 3. Website Extraction
-        const webBtn = el.querySelector('a[aria-label*="Website"], a[aria-label*="Situs"], a[data-value="Website"], a[data-tooltip*="Website"]');
+        const webBtn = el.querySelector('a[aria-label*="Website"], a[aria-label*="Situs"], a[data-value="Website"], a[data-tooltip*="Situs"], a[data-tooltip*="website"]');
         let website = webBtn ? (webBtn as HTMLAnchorElement).href : null;
         if (website && (website.includes('google.com') || website.includes('search') || website.includes('javascript:'))) website = null;
 
@@ -587,23 +606,20 @@ export async function scrapeLeadDetailsByName(name: string, location: string): P
 
     // 2. Extract from panel
     const details = await page.evaluate(() => {
-      const findByItemId = (pattern: string) => {
-        const el = Array.from(document.querySelectorAll('[data-item-id]')).find(el =>
-          (el.getAttribute('data-item-id') || '').includes(pattern) &&
-          (el as HTMLElement).offsetParent !== null
-        );
-        return el ? (el as HTMLElement).innerText.trim() : null;
-      };
+      // Find phone
+      const phoneEl = Array.from(document.querySelectorAll('[data-item-id]')).find(el =>
+        (el.getAttribute('data-item-id') || '').includes('phone:tel:') &&
+        (el as HTMLElement).offsetParent !== null
+      );
+      let phone = phoneEl ? (phoneEl as HTMLElement).innerText.trim() : null;
 
-      // 1. Find phone
-      let phone = findByItemId('phone:tel:');
       if (!phone) {
         const phoneLinks = Array.from(document.querySelectorAll('a[href^="tel:"]'))
           .filter(el => (el as HTMLElement).offsetParent !== null);
         phone = phoneLinks.length > 0 ? (phoneLinks[0] as HTMLAnchorElement).href.replace('tel:', '').trim() : null;
       }
 
-      // 2. Find website
+      // Find website
       const webEl = Array.from(document.querySelectorAll('[data-item-id="authority"]'))
         .find(el => (el as HTMLElement).offsetParent !== null);
       let website = webEl ? (webEl as HTMLAnchorElement).href : null;

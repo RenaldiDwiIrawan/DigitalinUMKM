@@ -1,5 +1,4 @@
 import { NextResponse } from 'next/server';
-import { getBrowser } from '@/lib/browser';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60; // Required for slow scraping tasks on Vercel Pro
@@ -12,78 +11,53 @@ export async function GET(request: Request) {
     return NextResponse.json({ features: [] });
   }
 
-  let browser;
   try {
-    browser = await getBrowser();
-    const context = await browser.newContext({
-      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36',
-      locale: 'id-ID',
-      timezoneId: 'Asia/Jakarta',
-    });
-    const page = await context.newPage();
-
     console.log(`Searching for location: ${query}`);
 
-    // Go to Google Maps
-    await page.goto('https://www.google.com/maps', { waitUntil: 'load', timeout: 20000 });
-
-    // Handle Google Consent page if it appears
-    try {
-      const consentButton = page.locator('form[action*="consent.google.com"] button').first();
-      if (await consentButton.isVisible({ timeout: 2000 })) {
-        console.log('Accepting Google consent...');
-        await consentButton.click();
-        await page.waitForNavigation({ waitUntil: 'load', timeout: 5000 }).catch(() => {});
+    // Use Photon API (OpenStreetMap-based) which is free and reliable
+    // We filter for Indonesia to improve relevance
+    const response = await fetch(
+      `https://photon.komoot.io/api/?q=${encodeURIComponent(query)}&limit=8&lat=-6.200000&lon=106.816666`,
+      {
+        headers: {
+          'Accept': 'application/json',
+          'User-Agent': 'DigitalinUMKM/1.0'
+        }
       }
-    } catch (e) {
-      // Consent page didn't appear or already accepted
+    );
+
+    if (!response.ok) {
+      throw new Error(`Photon API error: ${response.status}`);
     }
 
-    // Type into search box
-    const searchInput = 'input[name="q"]';
-    await page.waitForSelector(searchInput, { timeout: 10000 });
-    await page.fill(searchInput, query);
+    const data = await response.json();
 
-    // Wait for suggestions to appear
-    await page.waitForTimeout(1500);
+    // Transform Photon data to match our frontend expectations if needed
+    // Photon already returns "features" with "properties"
+    const features = (data.features || []).map((f: any) => {
+      const p = f.properties;
 
-    // Extract suggestions
-    const suggestions = await page.evaluate(() => {
-      const items = document.querySelectorAll('.UaZMe, .GvS7Xd, .sbsb_c, [role="gridcell"]');
-      return Array.from(items).map(el => {
-        const text = (el as HTMLElement).innerText || '';
-        const lines = text.split('\n').filter(line => line.trim().length > 0 && line !== '');
+      // Create a nice display address
+      const parts = [p.district, p.city, p.state].filter(Boolean);
+      const display_address = parts.join(', ');
 
-        return {
-          name: lines[0] || '',
-          address: lines.slice(1).join(', ') || ''
-        };
-      }).filter(s => s.name.length > 0);
-    });
-
-    console.log(`Found ${suggestions.length} suggestions`);
-
-    // Map to the format expected by the frontend
-    const features = suggestions.map(s => {
-      const addressParts = s.address ? s.address.split(',') : [];
       return {
         properties: {
-          name: s.name,
-          display_address: s.address,
-          district: '',
-          city: addressParts[0]?.trim() || '',
-          state: addressParts[1]?.trim() || '',
-        }
+          name: p.name,
+          display_address: display_address || p.country || '',
+          district: p.district || '',
+          city: p.city || '',
+          state: p.state || '',
+          country: p.country || ''
+        },
+        geometry: f.geometry
       };
     });
 
+    console.log(`Found ${features.length} suggestions`);
     return NextResponse.json({ features });
   } catch (error: any) {
     console.error('Location suggest error:', error);
     return NextResponse.json({ features: [], error: error.message }, { status: 500 });
-  } finally {
-    if (browser) {
-      await browser.close().catch(err => console.error('Error closing browser:', err));
-    }
   }
 }

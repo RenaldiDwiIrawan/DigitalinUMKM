@@ -13,6 +13,9 @@ interface PhotonFeature {
     state?: string;
     country?: string;
   };
+  geometry: {
+    coordinates: [number, number]; // [lon, lat]
+  };
 }
 
 interface ScraperFormProps {
@@ -143,7 +146,12 @@ export function ScraperForm({ form, setForm, handleScrape, onReset, isPending, e
                           type="button"
                           className="w-full text-left px-4 py-3 hover:bg-blue-50 transition-colors flex flex-col gap-0.5 group/item"
                           onClick={() => {
-                            setForm({ ...form, location: fullLocation });
+                            setForm({
+                              ...form,
+                              location: fullLocation,
+                              lat: feature.geometry.coordinates[1],
+                              lng: feature.geometry.coordinates[0]
+                            });
                             setSuggestions([]);
                             setShowSuggestions(false);
                           }}
