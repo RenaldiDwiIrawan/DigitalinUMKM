@@ -313,6 +313,29 @@ async function extractLeadDetails(page: Page, item: Locator, baseCoords: Coordin
       }
 
       const panelDetails = await page.evaluate(() => {
+        // Helper function to extract best phone from a string
+        const extractBestPhone = (input: string) => {
+          const phoneRegex = /(?:\+62|62|0)(?:\d{2,4})[\s.-]?(?:\d{3,5})[\s.-]?(?:\d{3,5})|(?:\+62|62|0)8[1-9][0-9]{7,11}/g;
+          const matches = input.match(phoneRegex);
+          if (!matches) return null;
+
+          const prioritizedMatches = matches.sort((a, b) => {
+            const score = (s: string) => {
+              const digits = s.replace(/[^\d]/g, '');
+              if (s.startsWith('+62') || s.startsWith('62')) return 100;
+              if (s.startsWith('08')) return 90;
+              if (digits.length >= 10) return 80;
+              return digits.length;
+            };
+            return score(b) - score(a);
+          });
+
+          return prioritizedMatches.find(m => {
+            const digits = m.replace(/[^\d]/g, '');
+            return digits.length >= 7 && !/^19\d{2}$|^20\d{2}$/.test(digits);
+          }) || null;
+        };
+
         // Find phone
         const phoneEl = Array.from(document.querySelectorAll('[data-item-id]')).find(el =>
           (el.getAttribute('data-item-id') || '').includes('phone:tel:') &&
@@ -326,6 +349,20 @@ async function extractLeadDetails(page: Page, item: Locator, baseCoords: Coordin
           phone = phoneLinks.length > 0 ? (phoneLinks[0] as HTMLAnchorElement).href.replace('tel:', '').trim() : null;
         }
 
+        if (!phone) {
+          const phoneBtn = Array.from(document.querySelectorAll('button, a, span')).find(el => {
+            if ((el as HTMLElement).offsetParent === null) return false;
+            const text = (el as HTMLElement).innerText || '';
+            const found = extractBestPhone(text);
+            return !!found;
+          });
+          if (phoneBtn) phone = extractBestPhone((phoneBtn as HTMLElement).innerText);
+        }
+
+        if (phone) {
+          phone = extractBestPhone(phone) || phone.replace(/[^\d\s\-\+\(\)]/g, '').trim();
+        }
+
         // Find website
         const webEl = Array.from(document.querySelectorAll('[data-item-id="authority"]'))
           .find(el => (el as HTMLElement).offsetParent !== null);
@@ -336,17 +373,6 @@ async function extractLeadDetails(page: Page, item: Locator, baseCoords: Coordin
             .find(el => (el as HTMLElement).offsetParent !== null);
           website = webBtn ? (webBtn as HTMLAnchorElement).href : null;
         }
-
-        if (!phone) {
-          const phoneBtn = Array.from(document.querySelectorAll('button, a, span')).find(el => {
-            if ((el as HTMLElement).offsetParent === null) return false;
-            const text = (el as HTMLElement).innerText || '';
-            return /^(\+62|62|0)8[1-9][0-9]{7,11}$/.test(text.replace(/[\s\-]/g, ''));
-          });
-          phone = phoneBtn ? (phoneBtn as HTMLElement).innerText.trim() : null;
-        }
-
-        if (phone) phone = phone.replace(/[^\d\s\-\+\(\)]/g, '').trim();
 
         if (website) {
           const lowerWeb = website.toLowerCase();
