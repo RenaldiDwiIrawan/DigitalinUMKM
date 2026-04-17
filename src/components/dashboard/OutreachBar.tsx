@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button"
 import { useDashboard } from "@/context/DashboardContext"
 
 export function OutreachBar() {
-  const { selectedLeadNames, leads, clearSelection, selectionMode } = useDashboard()
+  const { selectedLeadNames, leads, clearSelection, selectionMode, form } = useDashboard()
 
   if (!selectionMode || selectedLeadNames.length === 0) return null
 
@@ -14,7 +14,7 @@ export function OutreachBar() {
       const lead = leads.find(l => l.name === name)
       if (lead?.phone) {
         // Format message
-        const message = `Halo *${lead.name}*, saya melihat bisnis Anda. Saya ingin menawarkan jasa pembuatan website profesional untuk membantu meningkatkan omzet Anda. Apakah Anda tertarik?`
+        const message = `Halo *${lead.name}*, saya melihat bisnis Anda di *${form.location}*. Saya ingin menawarkan jasa pembuatan website profesional untuk membantu meningkatkan omzet Anda. Apakah Anda tertarik?`
         const url = `https://wa.me/${lead.phone.replace(/\D/g, '')}?text=${encodeURIComponent(message)}`
         window.open(url, '_blank')
       }
