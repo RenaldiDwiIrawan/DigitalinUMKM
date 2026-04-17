@@ -4,8 +4,9 @@ import { useState } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { MapPin, Phone, Mail, Globe, Eye, Star, Trash2, Zap, Download, Loader2 } from "lucide-react"
+import { MapPin, Phone, Mail, Globe, Eye, Star, Trash2, Zap, Download, Loader2, CheckSquare, Check } from "lucide-react"
 import { exportToCSV } from "@/lib/utils"
+import { useDashboard } from "@/context/DashboardContext"
 
 export interface Lead {
   name: string
@@ -36,8 +37,10 @@ export function LeadCard({ lead, selectedLead, setSelectedLead, setViewingLead, 
   onUpdateLead?: (oldLead: Lead, updatedLead: Lead) => void,
   location?: string
 }) {
+  const { selectionMode, selectedLeadNames, toggleLeadSelection } = useDashboard()
   const [isEnriching, setIsEnriching] = useState(false);
   const [isEnrichingWebsite, setIsEnrichingWebsite] = useState(false);
+  const isSelected = selectedLeadNames.includes(lead.name)
 
   const enrichLead = async (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -90,9 +93,22 @@ export function LeadCard({ lead, selectedLead, setSelectedLead, setViewingLead, 
   };
   return (
     <Card
-      onClick={() => setViewingLead(lead)}
-      className="group bg-white hover:border-blue-500 hover:shadow-xl transition-all duration-300 cursor-pointer relative overflow-hidden flex flex-col justify-between border-gray-100 rounded-2xl h-full shadow-sm"
+      onClick={() => {
+        if (selectionMode) {
+          toggleLeadSelection(lead.name)
+        } else {
+          setViewingLead(lead)
+        }
+      }}
+      className={`group bg-white hover:border-blue-500 hover:shadow-xl transition-all duration-300 cursor-pointer relative overflow-hidden flex flex-col justify-between border-2 rounded-2xl h-full shadow-sm ${
+        isSelected ? "border-blue-500 shadow-lg ring-4 ring-blue-500/10" : "border-gray-100"
+      }`}
     >
+      {isSelected && (
+        <div className="absolute top-4 right-4 z-10 bg-blue-600 text-white rounded-full p-1 shadow-lg animate-in zoom-in duration-200">
+          <Check className="w-3 h-3" />
+        </div>
+      )}
       <CardContent className="p-5 flex flex-col h-full">
         <div className="flex justify-between items-start mb-4 shrink-0">
           <div className="w-10 h-10 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center text-sm font-bold group-hover:bg-blue-600 group-hover:text-white transition-all duration-300">
@@ -211,6 +227,7 @@ export function LeadCard({ lead, selectedLead, setSelectedLead, setViewingLead, 
 }
 
 export function LeadsGrid({ leads, selectedLead, setSelectedLead, setViewingLead, onReset, onOpenTemplates, isProcessing, onUpdateLead, location }: LeadsGridProps) {
+  const { selectionMode, setSelectionMode } = useDashboard()
   return (
     <div className="lg:col-span-8 xl:col-span-9">
       <div className="bg-white p-8 md:p-10 rounded-3xl shadow-sm border border-gray-100 min-h-[600px]">
@@ -234,6 +251,17 @@ export function LeadsGrid({ leads, selectedLead, setSelectedLead, setViewingLead
           <div className="flex items-center gap-2">
             {leads.length > 0 && (
               <>
+                <Button
+                  variant={selectionMode ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setSelectionMode(!selectionMode)}
+                  className={`h-9 rounded-xl text-[10px] font-bold uppercase tracking-wider transition-all flex items-center gap-2 ${
+                    selectionMode ? "bg-blue-600 text-white shadow-lg shadow-blue-600/20" : "bg-white border-gray-200 text-gray-600"
+                  }`}
+                >
+                  <CheckSquare className="w-3 h-3" />
+                  {selectionMode ? "Selesai Pilih" : "Pilih Massal"}
+                </Button>
                 <Button
                   variant="outline"
                   size="sm"
