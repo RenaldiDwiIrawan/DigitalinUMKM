@@ -31,6 +31,11 @@ interface DashboardState {
   }>>
   selectedLead: Lead | null
   setSelectedLead: (lead: Lead | null) => void
+  selectionMode: boolean
+  setSelectionMode: (mode: boolean) => void
+  selectedLeadNames: string[]
+  toggleLeadSelection: (name: string) => void
+  clearSelection: () => void
   resetDashboard: () => void
 }
 
@@ -39,6 +44,20 @@ const DashboardContext = createContext<DashboardState | undefined>(undefined)
 export function DashboardProvider({ children }: { children: ReactNode }) {
   const [leads, setLeads] = useState<Lead[]>([])
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null)
+  const [selectionMode, setSelectionMode] = useState(false)
+  const [selectedLeadNames, setSelectedLeadNames] = useState<string[]>([])
+
+  const toggleLeadSelection = (name: string) => {
+    setSelectedLeadNames(prev =>
+      prev.includes(name) ? prev.filter(n => n !== name) : [...prev, name]
+    )
+  }
+
+  const clearSelection = () => {
+    setSelectedLeadNames([])
+    setSelectionMode(false)
+  }
+
   const [form, setForm] = useState<{
     query: string;
     location: string;
@@ -66,6 +85,12 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
 
       const savedForm = localStorage.getItem('digitalin_form')
       if (savedForm) setForm(JSON.parse(savedForm))
+
+      const savedSelectionMode = localStorage.getItem('digitalin_selection_mode')
+      if (savedSelectionMode) setSelectionMode(JSON.parse(savedSelectionMode))
+
+      const savedSelectedLeadNames = localStorage.getItem('digitalin_selected_lead_names')
+      if (savedSelectedLeadNames) setSelectedLeadNames(JSON.parse(savedSelectedLeadNames))
     } catch (error) {
       console.error('Failed to load data from localStorage:', error)
     } finally {
@@ -89,6 +114,16 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     localStorage.setItem('digitalin_form', JSON.stringify(form))
   }, [form, isInitialized])
 
+  React.useEffect(() => {
+    if (!isInitialized) return
+    localStorage.setItem('digitalin_selection_mode', JSON.stringify(selectionMode))
+  }, [selectionMode, isInitialized])
+
+  React.useEffect(() => {
+    if (!isInitialized) return
+    localStorage.setItem('digitalin_selected_lead_names', JSON.stringify(selectedLeadNames))
+  }, [selectedLeadNames, isInitialized])
+
   const resetDashboard = () => {
     console.log('Resetting dashboard data...');
     setLeads([])
@@ -101,6 +136,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       radius: ''
     })
     setSelectedLead(null)
+    clearSelection()
     localStorage.removeItem('digitalin_leads')
     localStorage.removeItem('digitalin_selected_lead')
     localStorage.removeItem('digitalin_form')
@@ -115,6 +151,11 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
         setForm,
         selectedLead,
         setSelectedLead,
+        selectionMode,
+        setSelectionMode,
+        selectedLeadNames,
+        toggleLeadSelection,
+        clearSelection,
         resetDashboard
       }}
     >
