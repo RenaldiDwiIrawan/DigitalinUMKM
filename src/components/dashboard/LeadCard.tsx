@@ -5,6 +5,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Phone, Mail, Globe, Zap, Loader2, Check } from "lucide-react"
 import { Lead } from "./LeadsGrid"
+import { useDashboard } from "@/context/DashboardContext"
 
 interface LeadCardProps {
   lead: Lead
@@ -31,8 +32,11 @@ export const LeadCard = React.memo(({
   onUpdateLead,
   location
 }: LeadCardProps) => {
+  const { processingLeads } = useDashboard();
   const [isEnriching, setIsEnriching] = useState(false);
   const [isEnrichingWebsite, setIsEnrichingWebsite] = useState(false);
+
+  const isAutoEnriching = processingLeads.includes(lead.name);
 
   const enrichLead = async (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -122,12 +126,12 @@ export const LeadCard = React.memo(({
           <div className="space-y-2 mt-auto">
             <div className="flex items-center justify-between gap-2 text-[11px] font-medium text-gray-500">
               <div className="flex items-center gap-2 truncate">
-                <Phone className="w-3 h-3 text-blue-400" />
-                <span className={`truncate ${lead.phone ? '' : 'italic opacity-60'}`}>
-                  {lead.phone || 'Telepon N/A'}
+                <Phone className={`w-3 h-3 ${isAutoEnriching ? 'text-blue-600 animate-pulse' : 'text-blue-400'}`} />
+                <span className={`truncate ${lead.phone ? '' : 'italic opacity-60'} ${isAutoEnriching ? 'text-blue-600 font-bold' : ''}`}>
+                  {isAutoEnriching ? 'Mencari Telp...' : (lead.phone || 'Telepon N/A')}
                 </span>
               </div>
-              {!lead.phone && (
+              {!lead.phone && !isAutoEnriching && (
                 <button
                   onClick={enrichWebsite}
                   disabled={isEnrichingWebsite}
