@@ -37,6 +37,9 @@ interface DashboardState {
   toggleLeadSelection: (name: string) => void
   clearSelection: () => void
   resetDashboard: () => void
+  processingLeads: string[]
+  setProcessingLeads: React.Dispatch<React.SetStateAction<string[]>>
+  updateLead: (oldLead: Lead, updatedLead: Lead) => void
 }
 
 const DashboardContext = createContext<DashboardState | undefined>(undefined)
@@ -46,6 +49,11 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null)
   const [selectionMode, setSelectionMode] = useState(false)
   const [selectedLeadNames, setSelectedLeadNames] = useState<string[]>([])
+  const [processingLeads, setProcessingLeads] = useState<string[]>([])
+
+  const updateLead = (oldLead: Lead, updatedLead: Lead) => {
+    setLeads(prev => prev.map(l => l.name === oldLead.name ? updatedLead : l))
+  }
 
   const toggleLeadSelection = (name: string) => {
     setSelectedLeadNames(prev =>
@@ -156,7 +164,10 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
         selectedLeadNames,
         toggleLeadSelection,
         clearSelection,
-        resetDashboard
+        resetDashboard,
+        processingLeads,
+        setProcessingLeads,
+        updateLead
       }}
     >
       {children}
