@@ -7,6 +7,7 @@ import { MapPin, Phone, Mail, Globe, Eye, Star, Trash2, Zap, Download, Loader2, 
 import { exportToCSV } from "@/lib/utils"
 import { useDashboard } from "@/context/DashboardContext"
 import { LeadCard } from "./LeadCard"
+import { useAutoEnrichment } from "@/hooks/useAutoEnrichment"
 
 export interface Lead {
   name: string
@@ -29,6 +30,7 @@ interface LeadsGridProps {
 }
 
 export function LeadsGrid({ leads, selectedLead, setSelectedLead, setViewingLead, onReset, onOpenTemplates, isProcessing, onUpdateLead, location }: LeadsGridProps) {
+  useAutoEnrichment()
   const { selectionMode, setSelectionMode, selectedLeadNames, toggleLeadSelection } = useDashboard()
 
   const handleToggleSelection = useCallback((name: string) => {
