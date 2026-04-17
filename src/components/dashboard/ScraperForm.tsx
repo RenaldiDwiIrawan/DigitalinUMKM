@@ -45,7 +45,7 @@ export function ScraperForm({ form, setForm, handleScrape, onReset, isPending, e
   const [showSuggestions, setShowSuggestions] = useState(false);
   const suggestionRef = useRef<HTMLDivElement>(null);
 
-  const businessOptions = ["Cafe", "Petshop", "Klinik", "Bengkell"];
+  const businessOptions = ["Cafe", "Petshop", "Klinik", "Bengkel"];
   const [isOther, setIsOther] = useState(!businessOptions.includes(form.query) && form.query !== "");
 
   // Handle dropdown change
@@ -101,6 +101,8 @@ export function ScraperForm({ form, setForm, handleScrape, onReset, isPending, e
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  const selectValue = isOther ? "other" : (businessOptions.includes(form.query) ? form.query : "");
+
   return (
     <Card className="bg-white overflow-hidden border border-gray-100 shadow-sm mb-8 rounded-3xl transition-all hover:shadow-md">
       <CardHeader className="bg-gray-50/50 pb-4 border-b border-gray-100 px-8 py-6">
@@ -113,16 +115,16 @@ export function ScraperForm({ form, setForm, handleScrape, onReset, isPending, e
       <CardContent className="p-8">
         <form onSubmit={handleScrape} className="space-y-6">
           <div className="space-y-2">
-            <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-2 px-1">
+            <label htmlFor="business-type" className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-2 px-1">
               Jenis Bisnis
             </label>
             <div className="relative group">
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 group-focus-within:text-blue-600 transition-colors z-10" />
               <Select
-                value={isOther ? "other" : (businessOptions.includes(form.query) ? form.query : "")}
+                value={selectValue}
                 onValueChange={handleSelectChange}
               >
-                <SelectTrigger className="h-12 pl-11 bg-white border-gray-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/5 rounded-xl font-semibold text-gray-900 placeholder:text-gray-400 transition-all">
+                <SelectTrigger id="business-type" className="h-12 pl-11 bg-white border-gray-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/5 rounded-xl font-semibold text-gray-900 placeholder:text-gray-400 transition-all">
                   <SelectValue placeholder="Pilih Jenis Bisnis" />
                 </SelectTrigger>
                 <SelectContent>
