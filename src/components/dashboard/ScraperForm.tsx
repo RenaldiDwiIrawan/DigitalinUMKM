@@ -3,6 +3,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Search, MapPin, Radius, ListOrdered, AlertTriangle, ArrowRight, Loader2, Sparkles } from "lucide-react"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 
 interface PhotonFeature {
   properties: {
@@ -37,6 +44,20 @@ export function ScraperForm({ form, setForm, handleScrape, onReset, isPending, e
   const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const suggestionRef = useRef<HTMLDivElement>(null);
+
+  const businessOptions = ["Cafe", "Petshop", "Klinik", "Bengkell"];
+  const [isOther, setIsOther] = useState(!businessOptions.includes(form.query) && form.query !== "");
+
+  // Handle dropdown change
+  const handleSelectChange = (value: string) => {
+    if (value === "other") {
+      setIsOther(true);
+      setForm({ ...form, query: "" });
+    } else {
+      setIsOther(false);
+      setForm({ ...form, query: value });
+    }
+  };
 
   // Debounced location search
   useEffect(() => {
@@ -96,16 +117,35 @@ export function ScraperForm({ form, setForm, handleScrape, onReset, isPending, e
               Jenis Bisnis
             </label>
             <div className="relative group">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 group-focus-within:text-blue-600 transition-colors" />
-              <Input
-                type="text"
-                value={form.query}
-                onChange={(e) => setForm({ ...form, query: e.target.value })}
-                placeholder="Contoh: Cafe, Petshop, Klinik"
-                required
-                className="h-12 pl-11 bg-white border-gray-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/5 rounded-xl font-semibold text-gray-900 placeholder:text-gray-400 transition-all"
-              />
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 group-focus-within:text-blue-600 transition-colors z-10" />
+              <Select
+                value={isOther ? "other" : (businessOptions.includes(form.query) ? form.query : "")}
+                onValueChange={handleSelectChange}
+              >
+                <SelectTrigger className="h-12 pl-11 bg-white border-gray-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/5 rounded-xl font-semibold text-gray-900 placeholder:text-gray-400 transition-all">
+                  <SelectValue placeholder="Pilih Jenis Bisnis" />
+                </SelectTrigger>
+                <SelectContent>
+                  {businessOptions.map((opt) => (
+                    <SelectItem key={opt} value={opt}>{opt}</SelectItem>
+                  ))}
+                  <SelectItem value="other">Lainnya (Isi sendiri)</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
+
+            {isOther && (
+              <div className="mt-3 animate-in fade-in slide-in-from-top-2 duration-200">
+                <Input
+                  type="text"
+                  value={form.query}
+                  onChange={(e) => setForm({ ...form, query: e.target.value })}
+                  placeholder="Masukkan jenis bisnis..."
+                  required
+                  className="h-12 bg-white border-gray-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/5 rounded-xl font-semibold text-gray-900 placeholder:text-gray-400 transition-all"
+                />
+              </div>
+            )}
           </div>
 
           <div className="space-y-2 relative" ref={suggestionRef}>
@@ -228,6 +268,7 @@ export function ScraperForm({ form, setForm, handleScrape, onReset, isPending, e
               type="button"
               onClick={() => {
                 onReset();
+                setIsOther(false);
                 window.scrollTo({ top: 0, behavior: 'smooth' });
               }}
               variant="ghost"
