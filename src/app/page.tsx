@@ -7,6 +7,7 @@ import { ScraperForm } from '@/components/dashboard/ScraperForm'
 import { LeadsGrid, Lead } from '@/components/dashboard/LeadsGrid'
 import { TemplateModal } from '@/components/dashboard/TemplateModal'
 import { LeadDetailModal } from '@/components/dashboard/LeadDetailModal'
+import { OutreachBar } from '@/components/dashboard/OutreachBar'
 import { useDashboard } from '@/context/DashboardContext'
 
 export default function ScraperDashboard() {
@@ -254,6 +255,8 @@ export default function ScraperDashboard() {
         onClose={() => setIsTemplateModalOpen(false)}
         selectedLead={selectedLead}
       />
+
+      <OutreachBar />
     </div>
   )
 }
