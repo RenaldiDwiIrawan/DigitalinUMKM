@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { MapPin, Phone, Mail, Globe, Eye, Star, Trash2, Zap, Download, Loader2, CheckSquare, Check } from "lucide-react"
 import { exportToCSV } from "@/lib/utils"
 import { useDashboard } from "@/context/DashboardContext"
-import { LeadCard } from "./LeadCard"
+import { LeadCard, LeadCardSkeleton } from "./LeadCard"
 import { useAutoEnrichment } from "@/hooks/useAutoEnrichment"
 
 export interface Lead {
@@ -47,21 +47,21 @@ export function LeadsGrid({ leads, selectedLead, setSelectedLead, setViewingLead
 
   return (
     <div className="lg:col-span-8 xl:col-span-9">
-      <div className="bg-white p-8 md:p-10 rounded-3xl shadow-sm border border-gray-100 min-h-[600px]">
+      <div className="bg-white/70 backdrop-blur-xl p-8 md:p-10 rounded-3xl shadow-2xl shadow-primary/5 border border-[var(--color-glass-border)] min-h-[600px]">
         <div className="flex flex-col md:flex-row justify-between items-center gap-6 mb-12 text-center md:text-left">
           <div>
-            <h2 className="text-3xl font-bold text-gray-900 tracking-tight">Hasil Pencarian</h2>
+            <h2 className="text-3xl font-heading font-bold text-gray-900 tracking-tight">Hasil Pencarian</h2>
             <p className="text-gray-500 text-sm mt-1 font-medium">
               {isProcessing ? (
                 <span className="flex items-center gap-2">
                   <span className="relative flex h-2 w-2">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500"></span>
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary/40 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
                   </span>
-                  Sedang mencari... <span className="text-blue-600 font-bold">{leads.length}</span> ditemukan sejauh ini.
+                  Sedang mencari... <span className="text-primary font-bold">{leads.length}</span> ditemukan sejauh ini.
                 </span>
               ) : (
-                <>Ditemukan <span className="text-blue-600 font-bold">{leads.length}</span> bisnis potensial yang siap dikonversi.</>
+                <>Ditemukan <span className="text-primary font-bold">{leads.length}</span> bisnis potensial yang siap dikonversi.</>
               )}
             </p>
           </div>
@@ -73,7 +73,7 @@ export function LeadsGrid({ leads, selectedLead, setSelectedLead, setViewingLead
                   size="sm"
                   onClick={() => setSelectionMode(!selectionMode)}
                   className={`h-9 rounded-xl text-[10px] font-bold uppercase tracking-wider transition-all flex items-center gap-2 ${
-                    selectionMode ? "bg-blue-600 text-white shadow-lg shadow-blue-600/20" : "bg-white border-gray-200 text-gray-600"
+                    selectionMode ? "bg-primary text-white shadow-lg shadow-primary/20" : "bg-white/50 border-[var(--color-glass-border)] text-gray-600"
                   }`}
                 >
                   <CheckSquare className="w-3 h-3" />
@@ -84,7 +84,7 @@ export function LeadsGrid({ leads, selectedLead, setSelectedLead, setViewingLead
                   size="sm"
                   disabled={isProcessing}
                   onClick={() => exportToCSV(leads, `leads_${new Date().toISOString().split('T')[0]}`)}
-                  className="bg-white border-gray-200 text-gray-600 hover:bg-gray-50 px-4 h-9 rounded-xl text-[10px] font-bold uppercase tracking-wider transition-all flex items-center gap-2"
+                  className="bg-white/50 border-[var(--color-glass-border)] text-gray-600 hover:bg-white px-4 h-9 rounded-xl text-[10px] font-bold uppercase tracking-wider transition-all flex items-center gap-2"
                 >
                   <Download className="w-3 h-3" />
                   CSV
@@ -109,24 +109,19 @@ export function LeadsGrid({ leads, selectedLead, setSelectedLead, setViewingLead
 
         {leads.length === 0 && !isProcessing ? (
           <div className="flex flex-col items-center justify-center h-[400px] text-center px-10">
-            <div className="w-16 h-16 bg-gray-50 rounded-2xl flex items-center justify-center mb-6 text-gray-200">
+            <div className="w-16 h-16 bg-gray-50/50 rounded-2xl flex items-center justify-center mb-6 text-gray-200 border border-[var(--color-glass-border)]">
               <Zap className="w-8 h-8 fill-current" />
             </div>
-            <h3 className="text-xl font-bold text-gray-900 mb-2 tracking-tight">Belum Ada Data</h3>
+            <h3 className="text-xl font-heading font-bold text-gray-900 mb-2 tracking-tight">Belum Ada Data</h3>
             <p className="text-gray-400 max-w-sm mx-auto text-xs leading-relaxed">
               Gunakan filter di samping untuk mencari leads dari server secara real-time.
             </p>
           </div>
         ) : leads.length === 0 && isProcessing ? (
-          <div className="flex flex-col items-center justify-center h-[400px] text-center px-10">
-            <div className="w-20 h-20 bg-blue-50 rounded-3xl flex items-center justify-center mb-6 relative">
-              <div className="absolute inset-0 rounded-3xl border-2 border-blue-200 border-t-blue-600 animate-spin"></div>
-              <Zap className="w-8 h-8 text-blue-600" />
-            </div>
-            <h3 className="text-xl font-bold text-gray-900 mb-2 tracking-tight">Menghubungkan ke Server</h3>
-            <p className="text-gray-400 max-w-sm mx-auto text-xs leading-relaxed animate-pulse">
-              Memulai sesi browser aman untuk mengambil data terbaru...
-            </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            {[1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
+              <LeadCardSkeleton key={i} />
+            ))}
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
@@ -137,8 +132,8 @@ export function LeadsGrid({ leads, selectedLead, setSelectedLead, setViewingLead
               return (
                 <div
                   key={lead.name}
-                  className="animate-in fade-in slide-in-from-bottom-2 duration-300 fill-mode-both flex flex-col h-full"
-                  style={{ animationDelay: `${index * 40}ms` }}
+                  className="animate-in fade-in slide-in-from-bottom-4 duration-700 fill-mode-both flex flex-col h-full"
+                  style={{ animationDelay: `${index * 50}ms` }}
                 >
                   <LeadCard
                     lead={lead}
@@ -156,11 +151,7 @@ export function LeadsGrid({ leads, selectedLead, setSelectedLead, setViewingLead
               )
             })}
             {isProcessing && (
-              <div className="border-2 border-dashed border-gray-100 rounded-2xl p-6 flex flex-col items-center justify-center text-center bg-gray-50/30 min-h-[300px] animate-pulse">
-                <div className="w-10 h-10 rounded-full border-2 border-blue-100 border-t-blue-500 animate-spin mb-4"></div>
-                <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">Mencari Data Berikutnya...</p>
-                <p className="text-[10px] text-gray-300 mt-2">Menunggu respons dari server</p>
-              </div>
+              <LeadCardSkeleton />
             )}
           </div>
         )}
