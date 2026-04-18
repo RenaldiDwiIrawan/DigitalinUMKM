@@ -1,10 +1,6 @@
-import { type ClassValue, clsx } from "clsx"
-import { twMerge } from "tailwind-merge"
-
-export function cn(...inputs: ClassValue[]) {
-  return twMerge(clsx(inputs))
-}
-
+/**
+ * Exports data to a CSV file.
+ */
 export function exportToCSV(data: any[], filename: string) {
   if (data.length === 0) return;
 
@@ -29,12 +25,4 @@ export function exportToCSV(data: any[], filename: string) {
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
-}
-
-export function formatPhoneNumber(phone: string): string {
-  let cleaned = phone.replace(/\D/g, '');
-  if (cleaned.startsWith('0')) {
-    cleaned = '62' + cleaned.substring(1);
-  }
-  return cleaned;
 }

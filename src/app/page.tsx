@@ -114,8 +114,8 @@ export default function ScraperDashboard() {
         // If we found NO leads in this batch, but aren't done, we MUST continue
         // to find results that might be further down (especially with radius filtering)
         const statusMsg = newLeadsCount > 0
-          ? `Melanjutkan otomatis (${totalLeads}/${limitRequested})...`
-          : `Mencari lebih jauh... (${totalLeads} ditemukan)`;
+          ? `Mengambil batch berikutnya (${totalLeads}/${limitRequested} data)...`
+          : `Mencari lebih dalam pada peta... (${totalLeads} data ditemukan)`;
 
         setPartialWarning(statusMsg);
         setTimeout(() => handleScrape(undefined, true), 500);

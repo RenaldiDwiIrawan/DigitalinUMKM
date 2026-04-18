@@ -19,6 +19,10 @@ export const maxDuration = 60; // Applies to Pro tier
 export async function POST(req: NextRequest) {
   const { query, location, lat, lng, limit, radius, shouldScrapeEmail, offset } = await req.json();
 
+  // Force a small batch size (max 10) for Vercel Free stability.
+  // This ensures the function completes within the 10s limit.
+  const safeLimit = Math.min(limit || 10, 10);
+
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
     async start(controller) {
@@ -32,7 +36,7 @@ export async function POST(req: NextRequest) {
           location,
           lat,
           lng,
-          limit,
+          limit: safeLimit,
           radius,
           offset: offset || 0,
           shouldScrapeEmail: shouldScrapeEmail || false,
