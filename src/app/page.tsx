@@ -14,6 +14,7 @@ export default function ScraperDashboard() {
   const {
     leads,
     setLeads,
+    addLeads,
     form,
     setForm,
     selectedLead,
@@ -22,6 +23,7 @@ export default function ScraperDashboard() {
   } = useDashboard()
 
   const [viewingLead, setViewingLead] = useState<Lead | null>(null)
+  const [currentPage, setCurrentPage] = useState(1)
   const [error, setError] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
   const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false)
@@ -36,6 +38,7 @@ export default function ScraperDashboard() {
 
     if (!isContinuation) {
       setLeads([]) // Clear existing leads only for new search
+      setCurrentPage(1) // Reset to first page
       setPartialWarning(null)
     } else {
       setPartialWarning(` Server Terputus, Melanjutkan pencarian otomatis (${leads.length} data ditemukan)...`);
@@ -91,7 +94,7 @@ export default function ScraperDashboard() {
           try {
             const payload = JSON.parse(line)
             if (payload.type === 'lead') {
-              setLeads(prev => [...prev, payload.data])
+              addLeads([payload.data])
               newLeadsCount++
             } else if (payload.type === 'done') {
               serverIsDone = payload.isDone || false
@@ -217,6 +220,8 @@ export default function ScraperDashboard() {
               onUpdateLead={handleUpdateLead}
               isProcessing={isProcessing}
               location={form.location}
+              currentPage={currentPage}
+              setCurrentPage={setCurrentPage}
             />
           </div>
         </div>
