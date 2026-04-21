@@ -8,11 +8,13 @@ export interface Lead {
   website: string | null
   email: string | null
   distance: string | null
+  enrichmentAttempts?: number
 }
 
 interface DashboardState {
   leads: Lead[]
   setLeads: React.Dispatch<React.SetStateAction<Lead[]>>
+  addLeads: (newLeads: Lead[]) => void
   form: {
     query: string
     location: string
@@ -46,6 +48,15 @@ const DashboardContext = createContext<DashboardState | undefined>(undefined)
 
 export function DashboardProvider({ children }: { children: ReactNode }) {
   const [leads, setLeads] = useState<Lead[]>([])
+
+  const addLeads = (newLeads: Lead[]) => {
+    setLeads(prev => {
+      const existingNames = new Set(prev.map(l => l.name));
+      const uniqueNewLeads = newLeads.filter(l => !existingNames.has(l.name));
+      return [...prev, ...uniqueNewLeads];
+    });
+  }
+
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null)
   const [selectionMode, setSelectionMode] = useState(false)
   const [selectedLeadNames, setSelectedLeadNames] = useState<string[]>([])
@@ -155,6 +166,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       value={{
         leads,
         setLeads,
+        addLeads,
         form,
         setForm,
         selectedLead,
