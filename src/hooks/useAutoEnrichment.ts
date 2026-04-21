@@ -9,7 +9,7 @@ export function useAutoEnrichment() {
   useEffect(() => {
     // 1. Identify leads that need enrichment
     const needsEnrichment = leads
-      .filter(l => !l.phone)
+      .filter(l => !l.phone && (l.enrichmentAttempts || 0) < 2)
       .map(l => l.name)
       .filter(name => !processingLeads.includes(name) && !queueRef.current.includes(name));
 
@@ -45,8 +45,21 @@ export function useAutoEnrichment() {
       if (response.ok) {
         const details = await response.json();
         const lead = leads.find(l => l.name === nextName);
-        if (lead && details.phone) {
-          updateLead(lead, { ...lead, ...details });
+        if (lead) {
+          updateLead(lead, { 
+            ...lead, 
+            ...details, 
+            enrichmentAttempts: (lead.enrichmentAttempts || 0) + 1 
+          });
+        }
+      } else {
+        // Even if response not ok, increment attempts to prevent infinite retries
+        const lead = leads.find(l => l.name === nextName);
+        if (lead) {
+          updateLead(lead, { 
+            ...lead, 
+            enrichmentAttempts: (lead.enrichmentAttempts || 0) + 1 
+          });
         }
       }
     } catch (err) {

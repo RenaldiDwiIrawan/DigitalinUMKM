@@ -63,7 +63,7 @@ export const LeadCard = React.memo(({
 
   const enrichWebsite = async (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (lead.website || isEnrichingWebsite || !location) return;
+    if (isEnrichingWebsite || !location) return;
     setIsEnrichingWebsite(true);
     try {
       const response = await fetch('/api/enrich', {
@@ -74,7 +74,19 @@ export const LeadCard = React.memo(({
       if (response.ok) {
         const details = await response.json();
         if (onUpdateLead) {
-          onUpdateLead(lead, { ...lead, ...details });
+          onUpdateLead(lead, { 
+            ...lead, 
+            ...details, 
+            enrichmentAttempts: (lead.enrichmentAttempts || 0) + 1 
+          });
+        }
+      } else {
+        // Increment attempts even on failure
+        if (onUpdateLead) {
+          onUpdateLead(lead, { 
+            ...lead, 
+            enrichmentAttempts: (lead.enrichmentAttempts || 0) + 1 
+          });
         }
       }
     } catch (err) {
