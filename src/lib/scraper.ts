@@ -98,15 +98,15 @@ export async function findEmailFromWebsite(context: BrowserContext, url: string)
 /**
  * Handles scrolling in the Google Maps results panel to load more items.
  */
-async function scrollResults(page: Page, limit: number): Promise<boolean> {
+async function scrollResults(page: Page, limit: number, radius?: number): Promise<boolean> {
   const scrollContainerSelector = 'div[role="feed"], div[aria-label^="Results"], .m6qeH.tL9Q4c';
-  const maxScrollAttempts = 25;
+  const maxScrollAttempts = 40;
   let scrollAttempts = 0;
   let lastCount = 0;
   let stagnantAttempts = 0;
   let reachedEnd = false;
 
-  console.log(`Turbo Scrolling: mencari hingga ${limit} data...`);
+  console.log(`Turbo Scrolling: mencari hingga ${limit} data${radius ? ` dalam radius ${radius}km` : ''}...`);
 
   while (scrollAttempts < maxScrollAttempts) {
     const itemsCount = (await page.$$('div[role="article"]')).length;
@@ -318,7 +318,7 @@ export async function scrapeGoogleMaps(options: ScrapeOptions): Promise<ScrapeRe
     }
 
     const scrollTarget = offset + limit + 5;
-    const reachedEnd = await scrollResults(page, scrollTarget);
+    const reachedEnd = await scrollResults(page, scrollTarget, radius);
 
     const allVisibleLeads = await page.evaluate((base: Coordinates) => {
       const items = Array.from(document.querySelectorAll('div[role="article"]'));
@@ -355,10 +355,37 @@ export async function scrapeGoogleMaps(options: ScrapeOptions): Promise<ScrapeRe
 
     const leads: ScrapeResult[] = [];
     const seenNames = new Set<string>();
+
     for (const lead of allVisibleLeads.slice(offset)) {
       if (leads.length >= limit) break;
       if (seenNames.has(lead.name)) continue;
-      
+
+      // Strict radius filtering: discard results outside the requested radius
+      if (radius) {
+        if (!lead.distance) {
+          // If we can't determine distance and radius is strict, skip to be safe
+          continue;
+        }
+
+        try {
+          const distStr = lead.distance.toLowerCase().replace(',', '.');
+          let distKm = 0;
+          if (distStr.includes('km')) {
+            distKm = parseFloat(distStr.replace('km', '').trim());
+          } else if (distStr.includes('m')) {
+            distKm = parseFloat(distStr.replace('m', '').trim()) / 1000;
+          }
+
+          if (distKm > radius) {
+            console.log(`Skipping ${lead.name} - outside radius: ${lead.distance} > ${radius}km`);
+            continue;
+          }
+        } catch (e) {
+          console.warn(`Failed to parse distance for ${lead.name}: ${lead.distance}`);
+          continue; // Skip if we can't parse but radius is required
+        }
+      }
+
       seenNames.add(lead.name);
       leads.push(lead);
       if (onLeadFound) onLeadFound(lead);
