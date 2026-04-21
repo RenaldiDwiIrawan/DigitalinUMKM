@@ -8,6 +8,7 @@ import { exportToCSV } from "@/lib/utils"
 import { useDashboard } from "@/context/DashboardContext"
 import { LeadCard, LeadCardSkeleton } from "./LeadCard"
 import { useAutoEnrichment } from "@/hooks/useAutoEnrichment"
+import { Pagination } from "./Pagination"
 
 export interface Lead {
   name: string
@@ -15,6 +16,7 @@ export interface Lead {
   website: string | null
   email: string | null
   distance: string | null
+  enrichmentAttempts?: number
 }
 
 interface LeadsGridProps {
@@ -32,6 +34,11 @@ interface LeadsGridProps {
 export function LeadsGrid({ leads, selectedLead, setSelectedLead, setViewingLead, onReset, onOpenTemplates, isProcessing, onUpdateLead, location }: LeadsGridProps) {
   useAutoEnrichment()
   const { selectionMode, setSelectionMode, selectedLeadNames, toggleLeadSelection } = useDashboard()
+  const [currentPage, setCurrentPage] = useState(1)
+  const ITEMS_PER_PAGE = 10
+
+  const totalPages = Math.ceil(leads.length / ITEMS_PER_PAGE)
+  const displayedLeads = leads.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE)
 
   const handleToggleSelection = useCallback((name: string) => {
     toggleLeadSelection(name)
@@ -124,36 +131,46 @@ export function LeadsGrid({ leads, selectedLead, setSelectedLead, setViewingLead
             ))}
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-            {leads.map((lead, index) => {
-              const isSelected = selectedLeadNames.includes(lead.name)
-              const isCurrent = selectedLead?.name === lead.name
+          <>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+              {displayedLeads.map((lead, index) => {
+                const isSelected = selectedLeadNames.includes(lead.name)
+                const isCurrent = selectedLead?.name === lead.name
 
-              return (
-                <div
-                  key={lead.name}
-                  className="animate-in fade-in slide-in-from-bottom-4 duration-700 fill-mode-both flex flex-col h-full"
-                  style={{ animationDelay: `${index * 50}ms` }}
-                >
-                  <LeadCard
-                    lead={lead}
-                    isSelected={isSelected}
-                    isCurrent={isCurrent}
-                    selectionMode={selectionMode}
-                    onToggleSelection={handleToggleSelection}
-                    onSelect={handleSelect}
-                    onView={handleView}
-                    onOpenTemplates={onOpenTemplates}
-                    onUpdateLead={onUpdateLead}
-                    location={location}
-                  />
-                </div>
-              )
-            })}
-            {isProcessing && (
-              <LeadCardSkeleton />
-            )}
-          </div>
+                return (
+                  <div
+                    key={lead.name}
+                    className="animate-in fade-in slide-in-from-bottom-4 duration-700 fill-mode-both flex flex-col h-full"
+                    style={{ animationDelay: `${index * 50}ms` }}
+                  >
+                    <LeadCard
+                      lead={lead}
+                      isSelected={isSelected}
+                      isCurrent={isCurrent}
+                      selectionMode={selectionMode}
+                      onToggleSelection={handleToggleSelection}
+                      onSelect={handleSelect}
+                      onView={handleView}
+                      onOpenTemplates={onOpenTemplates}
+                      onUpdateLead={onUpdateLead}
+                      location={location}
+                    />
+                  </div>
+                )
+              })}
+              {isProcessing && (
+                <LeadCardSkeleton />
+              )}
+            </div>
+            <Pagination
+              currentPage={currentPage}
+              totalPages={totalPages}
+              onPageChange={(page) => {
+                setCurrentPage(page);
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }}
+            />
+          </>
         )}
       </div>
     </div>
