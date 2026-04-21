@@ -29,12 +29,13 @@ interface LeadsGridProps {
   onUpdateLead?: (oldLead: Lead, updatedLead: Lead) => void
   isProcessing?: boolean
   location?: string // Added location for enrichment
+  currentPage: number
+  setCurrentPage: (page: number) => void
 }
 
-export function LeadsGrid({ leads, selectedLead, setSelectedLead, setViewingLead, onReset, onOpenTemplates, isProcessing, onUpdateLead, location }: LeadsGridProps) {
+export function LeadsGrid({ leads, selectedLead, setSelectedLead, setViewingLead, onReset, onOpenTemplates, isProcessing, onUpdateLead, location, currentPage, setCurrentPage }: LeadsGridProps) {
   useAutoEnrichment()
   const { selectionMode, setSelectionMode, selectedLeadNames, toggleLeadSelection } = useDashboard()
-  const [currentPage, setCurrentPage] = useState(1)
   const ITEMS_PER_PAGE = 10
 
   const totalPages = Math.ceil(leads.length / ITEMS_PER_PAGE)
