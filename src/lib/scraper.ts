@@ -199,10 +199,10 @@ async function extractLeadDetails(page: Page, item: Locator, baseCoords: Coordin
     try {
       await page.waitForSelector('.DUwDvf, [data-item-id*="phone:tel:"], a[href^="tel:"]', { timeout: 10000 });
       let leadCoords: Coordinates | null = null;
-      for (let i = 0; i < 3; i++) {
+      for (let i = 0; i < 5; i++) { // Increased retries
         leadCoords = extractCoordsFromUrl(page.url());
         if (leadCoords) break;
-        await page.waitForTimeout(800);
+        await page.waitForTimeout(1000); // 1s delay
       }
 
       let distance = listDetails.distance;
