@@ -197,7 +197,7 @@ async function extractLeadDetails(page: Page, item: Locator, baseCoords: Coordin
     await item.click({ timeout: 5000 }).catch(() => item.dispatchEvent('click'));
 
     try {
-      await page.waitForSelector('.DUwDvf', { timeout: 8000 });
+      await page.waitForSelector('.DUwDvf, [data-item-id*="phone:tel:"], a[href^="tel:"]', { timeout: 10000 });
       let leadCoords: Coordinates | null = null;
       for (let i = 0; i < 3; i++) {
         leadCoords = extractCoordsFromUrl(page.url());
@@ -234,6 +234,14 @@ async function extractLeadDetails(page: Page, item: Locator, baseCoords: Coordin
         }
 
         if (phone) phone = window.extractBestPhone(phone);
+
+        // Deep scan fallback if primary selectors fail
+        if (!phone) {
+          const detailPanel = document.querySelector('.bJzY7c, .m6qeH');
+          if (detailPanel) {
+            phone = window.extractBestPhone((detailPanel as HTMLElement).innerText);
+          }
+        }
 
         const webEl = Array.from(document.querySelectorAll('[data-item-id="authority"]'))
           .find(el => (el as HTMLElement).offsetParent !== null);
@@ -286,7 +294,7 @@ export async function scrapeGoogleMaps(options: ScrapeOptions): Promise<ScrapeRe
     timezoneId: 'Asia/Jakarta',
     geolocation: (lat !== undefined && lng !== undefined) ? { latitude: lat, longitude: lng } : { longitude: 106.8272, latitude: -6.1751 },
     permissions: ['geolocation'],
-    viewport: { width: 800, height: 600 }
+    viewport: { width: 1280, height: 800 }
   });
 
   const page = await context.newPage();
