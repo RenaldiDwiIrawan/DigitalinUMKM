@@ -5,7 +5,7 @@
 export const extractBestPhone = (input: string): string | null => {
   if (!input) return null;
   
-  const phoneRegex = /(?:\+62|62|0)(?:\d{2,4})[\s.-]?(?:\d{3,5})[\s.-]?(?:\d{3,5})|(?:\+62|62|0)8[1-9][0-9]{7,11}/g;
+  const phoneRegex = /(?:\+62|62|0)(?:\d{2,4})[\s.-]?(?:\d{3,5})[\s.-]?(?:\d{3,5})|(?:\+62|62|0)8[1-9][0-9]{7,11}|(\d\s?){10,13}/g;
   const matches = input.match(phoneRegex);
   if (!matches) return null;
 
