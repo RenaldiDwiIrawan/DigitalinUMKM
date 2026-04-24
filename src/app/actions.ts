@@ -4,9 +4,17 @@ import { scrapeGoogleMaps, ScrapeResult } from '@/lib/scraper';
 import fs from 'fs';
 import path from 'path';
 
-export async function runScraper(query: string, location: string, limit: number = 10, radius?: number, shouldScrapeEmail: boolean = false) {
+export async function runScraper(
+  query: string,
+  location: string,
+  limit: number = 10,
+  radius?: number,
+  shouldScrapeEmail: boolean = false,
+  lat?: number,
+  lng?: number
+) {
   try {
-    const results = await scrapeGoogleMaps({ query, location, limit, radius, shouldScrapeEmail });
+    const results = await scrapeGoogleMaps({ query, location, limit, radius, shouldScrapeEmail, lat, lng });
 
     // Handle persistence in the action layer
     // Skip file writing on Vercel as the filesystem is read-only
