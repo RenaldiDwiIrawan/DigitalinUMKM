@@ -35,3 +35,4 @@ next-env.d.ts
 # scraper results
 /tools/scraper/results/*.json
 /public/docs/templates/**/*.json
+.worktrees/
